@@ -545,8 +545,12 @@ function pullShare(c){
       if (c.syncAt && d.at && d.at <= c.syncAt) return false;   // 変わっていない
       c.name = d.name; c.members = d.members; c.rules = d.rules;
       c.carry = d.carry || {}; c.syncAt = d.at;
+      const tag = "shared_" + c.share.key + "_";
       DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id)
-        .concat((d.sessions||[]).map(s=>Object.assign({}, s, {communityId:c.id})));
+        .concat((d.sessions||[]).map(s=>Object.assign({}, s, {communityId:c.id,
+          id: c.sharedFrom
+            ? (s.id.startsWith(tag) ? s.id : tag + s.id)   // 受け取り側は印を付ける
+            : s.id.replace(tag, "")})));                    // 送り主側は印を外して元に戻す
       lastPushed[c.id] = JSON.stringify(shareBody(c));   // 読んだ直後に送り返さない
       save();
       return true;
@@ -570,8 +574,10 @@ function applyShared(id, key, d, canEdit){
              carry:d.carry || {}, share:{key, id}, sharedFrom:true,
              readOnly:!canEdit, sharedAt:d.at, syncAt:d.at};
   DB.communities = DB.communities.filter(x=>x.id!==cid).concat([c]);
+  const tag = cid + "_";
   DB.sessions = DB.sessions.filter(s=>s.communityId!==cid).concat(
-    (d.sessions||[]).map(s=>Object.assign({}, s, {communityId:cid})));
+    (d.sessions||[]).map(s=>Object.assign({}, s,
+      {communityId:cid, id: s.id.startsWith(tag) ? s.id : tag + s.id})));
   lastPushed[cid] = JSON.stringify(shareBody(c));
   save();
   return cid;

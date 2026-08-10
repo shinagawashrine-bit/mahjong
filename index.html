@@ -846,7 +846,7 @@ function viewHome(){
           <div class="grow">
             <div style="font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:.02em">${esc(c.name)}${
               c.sharedFrom ? `<span class="roletag ${c.readOnly?"view":"edit"}">${
-                c.readOnly ? "閲覧のみ" : "入力できる"}</span>`
+                c.readOnly ? "閲覧者" : "編集者"}</span>`
               : c.share ? `<span class="roletag own">共有中</span>` : ""}</div>
             <div class="muted num">${Math.round(total)}半荘 · ${regulars(c).length}人 · ${c.rules.playerCount}人打ち</div>
           </div>
@@ -920,7 +920,7 @@ function viewCommunity(){
         `<button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>`}
 
     </div>
-    ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧のみ）" : "共有された記録です（入力できます）"}${
+    ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧者）" : "共有された記録です（編集者）"}${
         c.syncAt ? ` · ${new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}
         <button class="btn ghost sm" data-refresh-share
           style="padding:1px 8px;font-size:11px;margin-left:6px">${SHARE_STATE || "今すぐ読み込む"}</button></p>` : ""}
@@ -1212,16 +1212,16 @@ function tabSettings(c){
       : `<div>
         <div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">共有</div>
         ${c.share ? `
-          <div class="fld" style="margin-bottom:10px">見るだけのリンク
+          <div class="fld" style="margin-bottom:10px">閲覧者のリンク
             <div class="sharebox">${esc(shareLink(c, false))}</div>
             <button class="btn sm" data-copy-share="view" style="margin-top:6px">このリンクをコピー</button>
           </div>
-          <div class="fld">入力もできるリンク
+          <div class="fld">編集者のリンク
             <div class="sharebox">${esc(shareLink(c, true))}</div>
             <button class="btn sm" data-copy-share="edit" style="margin-top:6px">このリンクをコピー</button>
           </div>
           <p class="muted" style="margin:8px 0 0;font-size:11.5px">
-            入力できるリンクは、代わりに記録してもらう人にだけ渡してください。
+            編集者のリンクは、代わりに記録してもらう人にだけ渡してください。
             2人が同時に入力すると、あとから送られた方で上書きされます。</p>
           <div class="row" style="gap:8px;margin-top:10px">
             <button class="btn sm" data-push-share>今すぐ送る</button>

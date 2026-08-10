@@ -419,14 +419,19 @@ function defaultRules(playerCount){
 
 /* ========== derived data ========== */
 const community = id => DB.communities.find(c=>c.id===id);
-const chipStart  = c => c.rules.chipStart ?? 20;   // 1人が最初に持つチップ枚数
-const chipPoints = c => c.rules.chipPoints ?? 2;   // チップ1枚が何ポイントか
+
+/* その日のルール。卓を始めた時点のルールを控えてあるので、
+   あとで設定を変えても過去の記録は変わらない。
+   控えのない古い記録は、コミュニティの今のルールで読む。 */
+const rulesOf = s => s.rules || community(s.communityId).rules;
+const chipStart  = r => r.chipStart ?? 20;   // 1人が最初に持つチップ枚数
+const chipPoints = r => r.chipPoints ?? 2;   // チップ1枚が何ポイントか
 
 /* チップは終了時の枚数で入力する。持ち枚数（既定20枚）との差が増減になる。
    s.chips に増減が直接入っている古い記録もそのまま読めるようにしてある。 */
-function chipDelta(s, c, mid){
+function chipDelta(s, mid){
   const v = (s.chipCounts||{})[mid];
-  if (v !== undefined && v !== null && v !== "") return v - chipStart(c);
+  if (v !== undefined && v !== null && v !== "") return v - chipStart(rulesOf(s));
   return (s.chips||{})[mid] || 0;
 }
 
@@ -469,45 +474,51 @@ function statsOf(cid){
   const out = {};
   // 初期値は必ずここだけで作る（項目を足したときの入れ忘れを防ぐため）
   const blank = (id, name) => ({id, name, games:0, ranks:[0,0,0,0], scoreSum:0,
-                 chips:0, tips:0, penalty:0});
+                 chips:0, tips:0, penalty:0, extraPoints:0, money:0});
   regulars(c).forEach(m=>{ out[m.id] = blank(m.id, m.name); });   // ゲストは通算に入れない
   const ensure = id => out[id] || (out[id] = blank(id, memberName(c,id)));
 
+  // 日ごとにその日のルールで円に直してから足す（レートが途中で変わっても壊れない）
   sessionsOf(cid).forEach(s=>{
+    const R = rulesOf(s);
     s.games.forEach(g=>{
-      const {ranks, scores} = calcGame(g.points, c.rules);
+      const {ranks, scores} = calcGame(g.points, R);
       g.seats.forEach((mid,i)=>{
         if (isGuest(c, mid)) return;
         const st = ensure(mid);
         st.games++;
         st.ranks[ranks[i]]++;
         st.scoreSum += scores[i];
+        st.money += scores[i] * R.rate;
       });
     });
     s.participantIds.forEach(mid=>{
       if (isGuest(c, mid)) return;
-      const d = chipDelta(s, c, mid);
-      if (d) ensure(mid).chips += d;
-      const tp = tipDelta(s, mid);
-      if (tp) ensure(mid).tips += tp;
+      const st = ensure(mid);
+      const d = chipDelta(s, mid), tp = tipDelta(s, mid);
+      const pt = d*chipPoints(R) + tp;
+      st.chips += d; st.tips += tp;
+      st.extraPoints += pt;
+      st.money += pt * R.rate;
     });
     Object.entries(s.penalties||{}).forEach(([mid,v])=>{
-      if (v && !isGuest(c, mid)) ensure(mid).penalty += v;
+      if (!v || isGuest(c, mid)) return;
+      const st = ensure(mid);
+      st.penalty += v; st.extraPoints += v; st.money += v * R.rate;
     });
   });
 
   Object.values(out).forEach(st=>{
-    // 引き継ぎは成績には混ぜず、収支だけに効かせる
+    // 引き継ぎは成績には混ぜず、収支だけに効かせる（今のレートで換算）
     st.carry = carryOf(c, st.id);
     st.carryMoney = st.carry * c.rules.rate;
+    st.money = Math.round(st.money + st.carryMoney);
     const g = st.games;
     st.avgRank = g ? st.ranks.reduce((a,n,i)=>a+n*(i+1),0)/g : 0;
     st.rate = st.ranks.map(n=> g ? n/g : 0);
     st.rentai = g ? (st.ranks[0]+st.ranks[1])/g : 0;
-    // チップも祝儀・ペナルティもポイントに直してから合算し、最後にレートで円にする
-    st.extraPoints = st.chips*chipPoints(c) + st.tips + st.penalty;
-    st.money = (st.scoreSum + st.extraPoints) * c.rules.rate + st.carryMoney;
     st.avgScore = g ? st.scoreSum/g : 0;
+    st.avgMoney = g ? st.money/g : 0;
   });
   return out;
 }
@@ -528,10 +539,11 @@ function memberStats(cid, mid, sid){
   // sid を渡すとその日だけ、渡さなければコミュニティの通算
   const target = sid ? sessionsOf(cid).filter(s=>s.id===sid) : sessionsOf(cid);
   target.forEach(s=>{
+    const R = rulesOf(s);
     s.games.forEach(g=>{
       const i = g.seats.indexOf(mid);
       if (i < 0) return;
-      const {ranks, scores} = calcGame(g.points, c.rules);
+      const {ranks, scores} = calcGame(g.points, R);
       const r = ranks[i];
 
       out.games++; out.ranks[r]++; out.score += scores[i];
@@ -561,11 +573,12 @@ const avgRankOf = (ranks, games) => games ? ranks.reduce((a,v,i)=>a+v*(i+1),0)/g
 // 1セッション内の成績
 function sessionTotals(s){
   const c = community(s.communityId);
+  const R = rulesOf(s);
   const t = {};
   const ensure = id => t[id] ||
     (t[id] = {score:0, games:0, ranks:[0,0,0,0], best:null, worst:null});
   s.games.forEach(g=>{
-    const {ranks, scores} = calcGame(g.points, c.rules);
+    const {ranks, scores} = calcGame(g.points, R);
     g.seats.forEach((mid,i)=>{
       const e = ensure(mid);
       e.score += scores[i]; e.games++; e.ranks[ranks[i]]++;
@@ -575,11 +588,11 @@ function sessionTotals(s){
   });
   s.participantIds.forEach(ensure);
   Object.entries(t).forEach(([mid,e])=>{
-    e.chips = chipDelta(s, c, mid);
+    e.chips = chipDelta(s, mid);
     e.tips = tipDelta(s, mid);
     e.penalty = (s.penalties||{})[mid] || 0;
-    e.extraPoints = e.chips*chipPoints(c) + e.tips + e.penalty;  // チップ＋祝儀＋ペナルティ
-    e.money = (e.score + e.extraPoints) * c.rules.rate;
+    e.extraPoints = e.chips*chipPoints(R) + e.tips + e.penalty;  // チップ＋祝儀＋ペナルティ
+    e.money = Math.round((e.score + e.extraPoints) * R.rate);
   });
   return t;
 }
@@ -763,6 +776,8 @@ function tabStats(c){
           <span class="chev" style="font-size:14px">›</span></div>
         <div style="text-align:right">
           <div class="money ${cls(s.money)}" style="font-size:16px">${yen(s.money)}</div>
+          ${s.games ? `<div class="muted num" style="font-size:10.5px;line-height:1.4">
+            1半荘 ${yen(s.avgMoney)}</div>` : ""}
           ${s.carryMoney ? `<div class="muted num" style="font-size:10.5px;line-height:1.4">
             引き継ぎ ${yen(s.carryMoney)}</div>` : ""}
         </div>
@@ -859,7 +874,7 @@ function dayChart(s, c){
   const run = {};
   const series = ids.map(id=>{ run[id] = 0; return {id, name:memberName(c,id), pts:[0]}; });
   s.games.forEach(g=>{
-    const {scores} = calcGame(g.points, c.rules);
+    const {scores} = calcGame(g.points, rulesOf(s));
     series.forEach(se=>{
       const i = g.seats.indexOf(se.id);
       if (i >= 0) run[se.id] += scores[i];
@@ -992,16 +1007,17 @@ function tabSettings(c){
         <label class="fld">レート（1000点＝円）
           <input inputmode="numeric" value="${r.rate}" data-rule="rate"></label>
         <label class="fld">チップ（1枚＝ポイント）
-          <input inputmode="numeric" value="${chipPoints(c)}" data-rule="chipPoints"></label>
+          <input inputmode="numeric" value="${chipPoints(c.rules)}" data-rule="chipPoints"></label>
       </div>
       <label class="fld">チップの持ち枚数（1人が最初に持つ枚数）
-        <input inputmode="numeric" value="${chipStart(c)}" data-rule="chipStart"></label>
+        <input inputmode="numeric" value="${chipStart(c.rules)}" data-rule="chipStart"></label>
       <label class="fld">同点で終わったとき
         <select data-rule="tieBreak">
           <option value="seat" ${(r.tieBreak||"seat")==="seat"?"selected":""}>上家優先（起家に近い人が上位）</option>
           <option value="split" ${r.tieBreak==="split"?"selected":""}>順位点を山分け</option>
         </select></label>
-      <p class="muted">ルールを変えると過去の記録も新しいルールで再計算されます。</p>
+      <p class="muted">ルールの変更は次に始める卓から適用されます。過去の記録は、その日のルールのまま変わりません。</p>
+      <button class="btn sm" data-apply-rules-to-past>過去の記録にも今のルールを適用</button>
     </div>
 
     <div class="card card-p stack">
@@ -1086,6 +1102,7 @@ function viewMember(){
             <div class="v ${cls(st.extraPoints||0)}">${signed(st.extraPoints||0)}</div></div>
           <div class="stat"><div class="k">収支</div>
             <div class="v ${cls(st.money)}" style="font-size:16px">${yen(st.money)}</div>
+            ${m.games ? `<div class="sub2">1半荘 ${yen(st.money/m.games)}</div>` : ""}
             ${!sess && st.carryMoney ? `<div class="sub2">引き継ぎ ${yen(st.carryMoney)}</div>` : ""}</div>
         </div>
         <div class="statgrid" style="border-top:1px solid var(--line-soft)">
@@ -1159,7 +1176,8 @@ function viewSession(){
   const c = community(s.communityId);
   const t = sessionTotals(s);
   const parts = s.participantIds;
-  const n = c.rules.playerCount;
+  const R = rulesOf(s);
+  const n = R.playerCount;
 
   const totalsRows = parts.map(mid=>{
     const e = t[mid] || {score:0,games:0,money:0,chips:0,penalty:0,extraPoints:0};
@@ -1175,7 +1193,7 @@ function viewSession(){
       <thead><tr><th></th>${parts.map(mid=>
         `<th>${esc(memberName(c,mid))}</th>`).join("")}</tr></thead>
       <tbody>${s.games.map((g,gi)=>{
-        const {ranks,scores} = calcGame(g.points, c.rules);
+        const {ranks,scores} = calcGame(g.points, R);
         const by = {};
         g.seats.forEach((mid,i)=>{ by[mid] = {r:ranks[i]+1, s:scores[i], p:g.points[i], w:WINDS[i]}; });
         const open = (V.openGames || []).includes(gi);
@@ -1219,14 +1237,14 @@ function viewSession(){
         <h2 class="sec">チップ・祝儀・ペナルティ</h2>
         ${parts.map(mid=>{
           const cnt = (s.chipCounts||{})[mid];
-          const d = chipDelta(s, c, mid);
+          const d = chipDelta(s, mid);
           return `<div class="ppl">
           <div class="ppl-name">${esc(memberName(c,mid))}</div>
           <div class="ppl-fields">
             <label class="fld2">チップ（終了時の枚数）
               <span class="row" style="gap:6px">
                 <input inputmode="numeric" value="${cnt ?? ""}"
-                  placeholder="${chipStart(c)}" data-chip="${mid}">
+                  placeholder="${chipStart(R)}" data-chip="${mid}">
                 <span class="num ${cls(d)}" style="font-size:12px;white-space:nowrap">${
                   d ? signed(d)+"枚" : "±0"}</span></span></label>
             <div class="fld2">祝儀・ペナルティ（ポイント）
@@ -1245,9 +1263,9 @@ function viewSession(){
         ${(()=>{
           const total = parts.reduce((a,mid)=>{
             const v = (s.chipCounts||{})[mid];
-            return a + (v == null || v === "" ? chipStart(c) : v);
+            return a + (v == null || v === "" ? chipStart(R) : v);
           }, 0);
-          const want = chipStart(c) * parts.length;
+          const want = chipStart(R) * parts.length;
           const chipOk = total === want;
           const penSum = parts.reduce((a,mid)=> a + ((s.penalties||{})[mid] || 0), 0);
           const penOk = penSum === 0;
@@ -1339,7 +1357,17 @@ function viewSession(){
       </button>`;
     }).join("");
 
-    return `<main class="stack">${cards}</main>`;
+    const umaTxt = R.uma.map(u=>signed(u)).join(" / ");
+    return `<main class="stack">${cards}
+      <div class="card card-p">
+        <p class="eyebrow" style="margin:0 0 6px">この日のルール</p>
+        <div class="muted num" style="font-size:11.5px;line-height:1.8">
+          ${R.playerCount}人打ち・配給原点 ${R.startPoints.toLocaleString("ja-JP")}・返し点 ${R.returnPoints.toLocaleString("ja-JP")}<br>
+          ウマ ${umaTxt}・${R.tieBreak==="split"?"同点は山分け":"同点は上家優先"}<br>
+          レート ${R.rate}円・チップ1枚 ${chipPoints(R)}ポイント・持ち枚数 ${chipStart(R)}枚
+        </div>
+      </div>
+    </main>`;
   }
 }
 
@@ -1355,6 +1383,7 @@ function renderSheet(){
   el.innerHTML =
     sheet.kind === "text"    ? sheetText()    :
     sheet.kind === "confirm" ? sheetConfirm() :
+    sheet.kind === "choice"  ? sheetChoice()  :
     sheet.kind === "data"    ? sheetData()    : sheetGame();
   document.body.append(scrim, el);
   fitSheetAboveKeyboard();
@@ -1397,6 +1426,20 @@ function askText(title, label, value, okLabel, onOk){
 function askConfirm(title, message, okLabel, onOk){
   sheet = {kind:"confirm", title, message, okLabel, onOk};
   render();
+}
+// 選択肢が2つ以上あるときに使う
+function askChoice(title, message, choices){
+  sheet = {kind:"choice", title, message, choices};
+  render();
+}
+function sheetChoice(){
+  return `<div class="sheet-hd"><h3>${esc(sheet.title)}</h3>
+      <button class="btn ghost sm" data-close-sheet>やめる</button></div>
+    <div class="sheet-body stack">
+      <p style="margin:0;color:var(--ink-2)">${esc(sheet.message)}</p>
+      ${sheet.choices.map((ch,i)=>`<button class="btn wide ${ch.primary?"primary":""}"
+        data-choice="${i}">${esc(ch.label)}</button>`).join("")}
+    </div>`;
 }
 
 function sheetText(){
@@ -1447,7 +1490,8 @@ function sheetData(){
 function sheetGame(){
   const s = DB.sessions.find(x=>x.id===V.id);
   const c = community(s.communityId);
-  const n = c.rules.playerCount;
+  const R = rulesOf(s);
+  const n = R.playerCount;
   const draft = sheet.draft;
 
   const opts = mid => s.participantIds.map(p=>
@@ -1463,8 +1507,12 @@ function sheetGame(){
     </div>
     <div class="sheet-body stack">
       <p class="muted" style="margin:0">起家から順に、終局時の持ち点を<b>100点単位</b>で入れてください（32,700点なら 327）。</p>
-      ${resting.length ? `<div class="resting">抜け番　<b>${
-        resting.map(p=>esc(memberName(c,p))).join("・")}</b></div>` : ""}
+      <div class="between" style="gap:10px">
+        <span class="resting" style="flex:1;min-width:0">${resting.length
+          ? `抜け番　<b>${resting.map(p=>esc(memberName(c,p))).join("・")}</b>`
+          : `<span class="muted">全員が打ちます</span>`}</span>
+        <button class="btn sm" data-rotate-seats style="flex:0 0 auto">席を回す</button>
+      </div>
       <div>
         ${draft.seats.map((mid,i)=>`<div class="seat">
           <span class="wind">${WINDS[i]}</span>
@@ -1472,7 +1520,7 @@ function sheetGame(){
           <button class="signbtn" data-pt-sign="${i}" aria-pressed="${draft.signs[i] < 0}"
             aria-label="${WINDS[i]}家の持ち点の符号を切り替える">${draft.signs[i] < 0 ? "−" : "＋"}</button>
           <span class="ptfield">
-            <input inputmode="numeric" placeholder="${Math.round(c.rules.startPoints/100)}"
+            <input inputmode="numeric" placeholder="${Math.round(R.startPoints/100)}"
               data-pt="${i}" class="${draft.signs[i] < 0 ? "neg" : ""}"
               value="${draft.points[i]===null ? "" : Math.abs(draft.points[i])/100}">
             <span class="ptsuffix ${draft.signs[i] < 0 ? "neg" : ""}">00</span>
@@ -1509,9 +1557,9 @@ function updateTally(){
   const el = document.querySelector(".sheet");
   if (!el || !sheet || sheet.kind !== "game") return;
   const s = DB.sessions.find(x=>x.id===V.id);
-  const c = community(s.communityId);
-  const n = c.rules.playerCount;
-  const target = c.rules.startPoints * n;
+  const R = rulesOf(s);
+  const n = R.playerCount;
+  const target = R.startPoints * n;
   const pts = sheet.draft.points;
   const filled = pts.filter(p=>p!==null && !isNaN(p));
   const sum = filled.reduce((a,b)=>a+b,0);
@@ -1544,7 +1592,7 @@ function updateTally(){
   t.className = "tally ok";
   t.innerHTML = `<span>合計 ${target.toLocaleString("ja-JP")} ✓</span>`;
 
-  const {ranks, scores} = calcGame(pts, c.rules);
+  const {ranks, scores} = calcGame(pts, R);
   prev.innerHTML = `<p class="eyebrow" style="margin-top:6px">この半荘の結果</p>
     <table class="gtbl"><tbody>${sheet.draft.seats.map((mid,i)=>`
       <tr><td><span class="row"><span class="rp rp${ranks[i]+1}">${ranks[i]+1}</span>
@@ -1556,8 +1604,7 @@ function updateTally(){
 
 function openGameSheet(index){
   const s = DB.sessions.find(x=>x.id===V.id);
-  const c = community(s.communityId);
-  const n = c.rules.playerCount;
+  const n = rulesOf(s).playerCount;
   let draft;
   if (index == null){
     // 直前の半荘の席をずらして初期値にする（抜け番のローテーションに合わせやすくする）
@@ -1591,6 +1638,33 @@ document.addEventListener("click", e=>{
   if (d.goSession) return go({name:"session", id:d.goSession});
   if (d.tab) { V.tab = d.tab; return render(); }
   if (d.stab) { V.stab = d.stab; return render(); }
+
+  if (d.choice !== undefined){
+    const ch = sheet && sheet.choices && sheet.choices[+d.choice];
+    if (!ch) return;
+    sheet = null;
+    return ch.run();
+  }
+
+  if (d.rotateSeats !== undefined){
+    readDraft();
+    const s = DB.sessions.find(x=>x.id===V.id);
+    const order = s.participantIds, n = rulesOf(s).playerCount;
+    const start = (order.indexOf(sheet.draft.seats[0]) + 1) % order.length;
+    sheet.draft.seats = Array.from({length:n}, (_,i)=> order[(start+i)%order.length]);
+    return renderSheet();
+  }
+
+  if (d.applyRulesToPast !== undefined){
+    const c = community(V.id);
+    const list = DB.sessions.filter(s=>s.communityId===c.id);
+    return askConfirm("過去の記録にも適用",
+      `${list.length}日ぶんの記録を、今のルールで計算し直します。`, "適用する", ()=>{
+        list.forEach(s=>{ s.rules = JSON.parse(JSON.stringify(c.rules)); });
+        save(); go({name:"community", id:c.id, tab:"settings"});
+        toast("過去の記録にも適用しました");
+      });
+  }
 
   if (d.undo !== undefined){
     if (!undoData) return;
@@ -1679,12 +1753,25 @@ document.addEventListener("click", e=>{
 
   if (d.newSession !== undefined){
     const c = community(V.id);
-    if (c.members.length < c.rules.playerCount)
+    if (regulars(c).length < c.rules.playerCount)
       return toast(`先に設定タブでメンバーを${c.rules.playerCount}人以上登録してください`);
-    const s = {id:uid(), communityId:c.id, date:today(),
-      participantIds:c.members.map(m=>m.id), games:[], chips:{}, penalties:{}};
-    DB.sessions.push(s); save();
-    return go({name:"session", id:s.id});
+    const start = ()=>{
+      // 卓を始めた時点のルールを控える。あとで設定を変えてもこの日の記録は変わらない
+      const s = {id:uid(), communityId:c.id, date:today(),
+        rules: JSON.parse(JSON.stringify(c.rules)),
+        participantIds:regulars(c).map(m=>m.id), games:[], chips:{}, penalties:{}};
+      DB.sessions.push(s); save();
+      go({name:"session", id:s.id});
+    };
+    // 同じ日の記録が既にあるなら、続けるか別の卓かを聞く
+    const same = DB.sessions.filter(x=>x.communityId===c.id && x.date===today());
+    if (!same.length) return start();
+    const last = same[same.length-1];
+    return askChoice("今日の記録があります",
+      `${fmtDate(last.date)}に${last.games.length}半荘の記録があります。`, [
+        {label:"今日の卓を続ける", primary:true, run:()=>go({name:"session", id:last.id})},
+        {label:"別の卓として始める", run:start}
+      ]);
   }
   if (d.togglePart){
     const s = DB.sessions.find(x=>x.id===V.id);
@@ -1735,11 +1822,11 @@ document.addEventListener("click", e=>{
   if (d.fillRest !== undefined){
     readDraft();
     const s = DB.sessions.find(x=>x.id===V.id);
-    const c = community(s.communityId);
+    const R = rulesOf(s);
     const pts = sheet.draft.points;
     const i = pts.findIndex(p=>p === null);
     if (i < 0) return;
-    const rest = c.rules.startPoints*c.rules.playerCount - pts.reduce((a,p)=>a+(p||0),0);
+    const rest = R.startPoints*R.playerCount - pts.reduce((a,p)=>a+(p||0),0);
     sheet.draft.points[i] = rest;
     sheet.draft.signs[i] = rest < 0 ? -1 : 1;
     return renderSheet();
@@ -1767,12 +1854,12 @@ document.addEventListener("click", e=>{
   if (d.saveGame !== undefined){
     readDraft();
     const s = DB.sessions.find(x=>x.id===V.id);
-    const c = community(s.communityId);
-    const n = c.rules.playerCount;
+    const R = rulesOf(s);
+    const n = R.playerCount;
     const {seats, points} = sheet.draft;
     if (new Set(seats).size !== n) return toast("同じ人が2席に入っています");
     if (points.some(p=>p===null || isNaN(p))) return toast("持ち点が入っていない席があります");
-    if (points.reduce((a,b)=>a+b,0) !== c.rules.startPoints*n)
+    if (points.reduce((a,b)=>a+b,0) !== R.startPoints*n)
       return toast("持ち点の合計が合っていません");
     const g = {seats:seats.slice(), points:points.slice()};
     const isNew = sheet.index == null;
@@ -1893,7 +1980,7 @@ document.addEventListener("change", e=>{
         toast("記録があるので人数は変えられません"); return render();
       }
       c.rules = Object.assign(defaultRules(num),
-        {rate:c.rules.rate, chipPoints:chipPoints(c), chipStart:chipStart(c)});
+        {rate:c.rules.rate, chipPoints:chipPoints(c.rules), chipStart:chipStart(c.rules)});
     } else {
       c.rules[d.rule] = num;
     }

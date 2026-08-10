@@ -1414,6 +1414,13 @@ function viewSession(){
   const tab = V.stab || "score";
 
   const scoreTab = `<main class="stack">
+      ${c.share ? `<div class="between" style="padding:0 2px;margin-bottom:-4px">
+        <span class="muted" style="font-size:11.5px">${c.syncAt
+          ? new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) + "時点"
+          : "共有中"}</span>
+        <button class="btn ghost sm" data-refresh-share
+          style="padding:2px 10px;font-size:11.5px">${SHARE_STATE || "今すぐ読み込む"}</button>
+      </div>` : ""}
       <div class="card"><div class="card-p" style="padding-bottom:6px"><p class="eyebrow">今日の収支</p></div>
         <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
           <thead><tr><th>名前</th><th>半荘数</th><th>成績</th><th>チップ</th><th>収支</th></tr></thead>
@@ -1870,7 +1877,10 @@ document.addEventListener("click", e=>{
       });
   }
   if (d.refreshShare !== undefined){
-    const c = community(V.id);
+    const c = V.name === "session"
+      ? community((DB.sessions.find(x=>x.id===V.id)||{}).communityId)
+      : community(V.id);
+    if (!c) return;
     SHARE_STATE = "読み込み中"; render();
     return pullShare(c).then(ch=>{ SHARE_STATE = ""; render(); toast(ch ? "最新にしました" : "変わりありません"); });
   }

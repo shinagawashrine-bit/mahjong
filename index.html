@@ -424,28 +424,37 @@ function defaultRules(playerCount){
    入力する人の端末が本体で、預けるのはその写し。
    共有リンクを開いた人だけが読める（合言葉がリンクに入っている）。 */
 const scriptUrl = id => `https://script.google.com/macros/s/${id}/exec`;
-const shareLink = c => location.origin + location.pathname + "?s=" + DB.syncId + "." + c.share.key;
+const shareScriptId = c => (c.share && c.share.id) || DB.syncId;
+const shareLink = (c, edit) =>
+  location.origin + location.pathname + "?s=" + shareScriptId(c) + "." + c.share.key + (edit ? ".e" : "");
 
 let SHARE_STATE = "";          // 送信の状態を画面に出すため
 const lastPushed = {};
 
-function sharePayload(c){
+// 送る中身。at は毎回変わるので、送る必要があるかの判定からは外す
+function shareBody(c){
   return {
     name: c.name, rules: c.rules, carry: c.carry || {}, members: c.members,
-    sessions: DB.sessions.filter(s=>s.communityId===c.id),
-    at: new Date().toISOString()
+    sessions: DB.sessions.filter(s=>s.communityId===c.id)
   };
+}
+function sharePayload(c){
+  return Object.assign(shareBody(c), {at: new Date().toISOString()});
 }
 
 function pushShare(c, quiet){
-  if (!DB.syncId || !c.share || c.readOnly) return Promise.resolve();
-  const text = JSON.stringify(sharePayload(c));
-  if (lastPushed[c.id] === text) return Promise.resolve();
+  const id = shareScriptId(c);
+  if (!id || !c.share || c.readOnly) return Promise.resolve();
+  const body = JSON.stringify(shareBody(c));
+  if (lastPushed[c.id] === body) return Promise.resolve();
+  const payload = sharePayload(c);
+  const text = body;
   if (!quiet){ SHARE_STATE = "送信中"; render(); }
-  return fetch(scriptUrl(DB.syncId), {
+  c.syncAt = payload.at;
+  return fetch(scriptUrl(id), {
     method: "POST",
     headers: {"Content-Type": "text/plain;charset=utf-8"},   // 事前確認を挟ませない
-    body: JSON.stringify({k: c.share.key, data: JSON.parse(text)})
+    body: JSON.stringify({k: c.share.key, data: payload})
   }).then(r=>{
     // 書き込みが通っても、返ってくるのが JSON とは限らない（転送先のページが返る）。
     // 通信が成立していれば送れたものとして扱う。
@@ -454,10 +463,10 @@ function pushShare(c, quiet){
     if (!quiet) render();
   }).catch(()=>{
     // 返事を読めない環境でも、書き込み自体は通ることがあるので投げ直す
-    return fetch(scriptUrl(DB.syncId), {
+    return fetch(scriptUrl(id), {
       method: "POST", mode: "no-cors",
       headers: {"Content-Type": "text/plain;charset=utf-8"},
-      body: JSON.stringify({k: c.share.key, data: JSON.parse(text)})
+      body: JSON.stringify({k: c.share.key, data: payload})
     }).then(()=>{ lastPushed[c.id] = text; SHARE_STATE = ""; if (!quiet) render(); })
       .catch(()=>{ SHARE_STATE = "送信できませんでした"; if (!quiet) render(); });
   });
@@ -473,31 +482,60 @@ function queueShare(){
   }, 1200);
 }
 
-/* 共有リンクで開かれたときは、預けてある写しを読んで閲覧専用として並べる */
+/* 預けてある写しを読み直す。相手が更新していれば手元も追いつく。 */
+function pullShare(c){
+  const id = shareScriptId(c);
+  if (!id || !c.share) return Promise.resolve(false);
+  return fetch(scriptUrl(id) + "?k=" + encodeURIComponent(c.share.key))
+    .then(r=>r.json())
+    .then(d=>{
+      if (!d || d.error || !d.name) return false;
+      if (c.syncAt && d.at && d.at <= c.syncAt) return false;   // 変わっていない
+      c.name = d.name; c.members = d.members; c.rules = d.rules;
+      c.carry = d.carry || {}; c.syncAt = d.at;
+      DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id)
+        .concat((d.sessions||[]).map(s=>Object.assign({}, s, {communityId:c.id})));
+      lastPushed[c.id] = JSON.stringify(shareBody(c));   // 読んだ直後に送り返さない
+      save();
+      return true;
+    }).catch(()=>false);
+}
+function refreshShared(all){
+  const list = DB.communities.filter(c=>c.share && (all || c.readOnly));
+  if (!list.length) return;
+  Promise.all(list.map(pullShare)).then(r=>{ if (r.some(Boolean)) render(); });
+}
+document.addEventListener("visibilitychange", ()=>{
+  if (!document.hidden) refreshShared(true);          // 戻ってきたら読み直す
+});
+setInterval(()=>{ if (!document.hidden) refreshShared(false); }, 60000);  // 閲覧中は1分おき
+
+/* 共有リンクで開かれたときは、預けてある写しを読んで並べる */
 let SHARED_LOADING = false, SHARED_ERROR = "";
-function applyShared(key, d){
+function applyShared(id, key, d, canEdit){
   const cid = "shared_" + key;
   const c = {id:cid, name:d.name, members:d.members, rules:d.rules,
-             carry:d.carry || {}, share:{key}, readOnly:true, sharedAt:d.at};
+             carry:d.carry || {}, share:{key, id}, sharedFrom:true,
+             readOnly:!canEdit, sharedAt:d.at, syncAt:d.at};
   DB.communities = DB.communities.filter(x=>x.id!==cid).concat([c]);
   DB.sessions = DB.sessions.filter(s=>s.communityId!==cid).concat(
-    (d.sessions||[]).map(s=>Object.assign({}, s, {id:cid+"_"+s.id, communityId:cid})));
+    (d.sessions||[]).map(s=>Object.assign({}, s, {communityId:cid})));
+  lastPushed[cid] = JSON.stringify(shareBody(c));
   save();
   return cid;
 }
 function loadShared(){
   const p = new URLSearchParams(location.search).get("s");
   if (!p) return;
-  const dot = p.indexOf(".");
-  if (dot < 0) return;
-  const id = p.slice(0, dot), key = p.slice(dot+1);
+  const bits = p.split(".");
+  const id = bits[0], key = bits[1], canEdit = bits[2] === "e";
   if (!id || !key) return;
   SHARED_LOADING = true; SHARED_ERROR = ""; render();
   fetch(scriptUrl(id) + "?k=" + encodeURIComponent(key))
     .then(r=>r.json())
     .then(d=>{
       if (!d || d.error || !d.name) throw new Error(d && d.error || "empty");
-      const cid = applyShared(key, d);
+      const cid = applyShared(id, key, d, canEdit);
       SHARED_LOADING = false;
       go({name:"community", id:cid, tab:"stats"});
     })
@@ -858,9 +896,10 @@ function viewCommunity(){
       <button class="tab" role="tab" aria-selected="${tab==="log"}" data-tab="log">記録</button>
       ${c.readOnly ? "" :
         `<button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>`}
+      ${c.share ? `<button class="tab" role="tab" data-refresh-share>更新</button>` : ""}
     </div>
-    ${c.readOnly ? `<p class="viewonly">共有された記録です（閲覧のみ）${
-        c.sharedAt ? ` · ${new Date(c.sharedAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}</p>` : ""}
+    ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧のみ）" : "共有された記録です（入力できます）"}${
+        c.syncAt ? ` · ${new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}</p>` : ""}
     ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
 }
 
@@ -1144,22 +1183,33 @@ function tabSettings(c){
     <div class="card card-p stack">
       <h2 class="sec">コミュニティ</h2>
       <label class="fld">名前<input value="${esc(c.name)}" data-community-name></label>
-      <div>
+      ${c.sharedFrom ? `<p class="muted" style="margin:0;font-size:11.5px">
+        共有されたコミュニティです。共有の設定と削除は、元の人の端末から行います。</p>`
+      : `<div>
         <div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">共有</div>
         ${c.share ? `
-          <div class="sharebox">${esc(shareLink(c))}</div>
-          <div class="row" style="gap:8px;margin-top:8px">
-            <button class="btn sm" data-copy-share>リンクをコピー</button>
+          <div class="fld" style="margin-bottom:10px">見るだけのリンク
+            <div class="sharebox">${esc(shareLink(c, false))}</div>
+            <button class="btn sm" data-copy-share="view" style="margin-top:6px">このリンクをコピー</button>
+          </div>
+          <div class="fld">入力もできるリンク
+            <div class="sharebox">${esc(shareLink(c, true))}</div>
+            <button class="btn sm" data-copy-share="edit" style="margin-top:6px">このリンクをコピー</button>
+          </div>
+          <p class="muted" style="margin:8px 0 0;font-size:11.5px">
+            入力できるリンクは、代わりに記録してもらう人にだけ渡してください。
+            2人が同時に入力すると、あとから送られた方で上書きされます。</p>
+          <div class="row" style="gap:8px;margin-top:10px">
             <button class="btn sm" data-push-share>今すぐ送る</button>
             <button class="btn ghost sm danger" data-stop-share>共有をやめる</button>
           </div>
-          <p class="muted" style="margin:6px 0 0;font-size:11.5px">
-            ${SHARE_STATE ? esc(SHARE_STATE) : "このリンクを開いた人が、このコミュニティの成績を見られます（閲覧のみ）。"}</p>`
+          ${SHARE_STATE ? `<p class="muted" style="margin:6px 0 0;font-size:11.5px">${esc(SHARE_STATE)}</p>` : ""}`
         : `<button class="btn sm" data-start-share>共有をはじめる</button>
            <p class="muted" style="margin:6px 0 0;font-size:11.5px">
              リンクを渡した人が、このコミュニティの成績を見られるようになります。</p>`}
-      </div>
-      <button class="btn danger" data-del-community style="border:1px solid var(--line)">このコミュニティを削除</button>
+      </div>`}
+      <button class="btn danger" data-del-community style="border:1px solid var(--line)">${
+        c.sharedFrom ? "このコミュニティを手元から消す" : "このコミュニティを削除"}</button>
     </div>
   </main>`;
 }
@@ -1779,7 +1829,7 @@ document.addEventListener("click", e=>{
   if (d.startShare !== undefined){
     const c = community(V.id);
     const begin = ()=>{
-      c.share = {key: uid() + uid()};   // リンクに入れる合言葉
+      c.share = {key: uid() + uid(), id: DB.syncId};   // 合言葉と保管庫
       save(); render();
       pushShare(c);
     };
@@ -1792,9 +1842,14 @@ document.addEventListener("click", e=>{
         begin();
       });
   }
+  if (d.refreshShare !== undefined){
+    const c = community(V.id);
+    SHARE_STATE = "読み込み中"; render();
+    return pullShare(c).then(ch=>{ SHARE_STATE = ""; render(); toast(ch ? "最新にしました" : "変わりありません"); });
+  }
   if (d.copyShare !== undefined){
     const c = community(V.id);
-    const text = shareLink(c);
+    const text = shareLink(c, d.copyShare === "edit");
     if (navigator.clipboard && navigator.clipboard.writeText)
       navigator.clipboard.writeText(text).then(()=>toast("コピーしました"),
         ()=>toast("長押しで選択してコピーしてください"));
@@ -2224,6 +2279,7 @@ document.addEventListener("change", e=>{
 
 render();
 loadShared();
+refreshShared(true);
 </script>
 </body>
 </html>

@@ -263,6 +263,42 @@ input.neg{color:var(--bad);font-weight:600}
 .roletag.edit{background:var(--accent-soft);color:var(--accent)}
 .roletag.view{background:var(--surface-2);color:var(--ink-3);border:1px solid var(--line-soft)}
 
+/* ===== ここから下は画面が広いときだけ効く。iPhoneの見た目は変わらない ===== */
+@media (min-width:760px){
+  #app{max-width:760px}
+  main{padding:20px 20px 24px}
+  .tabs{padding:0 20px}
+  .hd{padding-left:20px}
+
+  /* カードを2列に並べる */
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+
+  /* グラフは横幅いっぱいまで伸ばす（縦は比率どおり） */
+  .scroller svg{width:100%;height:auto}
+
+  /* 半荘の表は余裕をもたせる */
+  .gtbl.games th,.gtbl.games td{padding:9px 7px}
+  .gtbl.games th{font-size:11px}
+  .gtbl.games td{font-size:13.5px}
+  .gtbl.games .rp{width:21px;height:21px;font-size:12px}
+  .gtbl.games .ptval{font-size:12.5px}
+  .gtbl.games .ptwind{font-size:11px}
+
+  /* 精算は「名前・チップ・祝儀ペナ」を横一列に */
+  .ppl{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px;align-items:end;padding:12px 0}
+  .ppl-name{margin-bottom:0;align-self:center}
+  .ppl-fields{display:contents}
+
+  /* 入力用のシートは下から浮かせて、独立した箱に見せる */
+  .sheet{bottom:24px;border-radius:16px;max-height:min(88vh,760px)}
+  .fab{width:min(420px,calc(100% - 40px))}
+}
+@media (min-width:1100px){
+  #app{max-width:1000px}
+  main{padding:24px 24px 28px}
+  .tabs{padding:0 24px}
+}
+
 .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--ink);
   color:var(--bg);padding:9px 18px;border-radius:20px;font-size:13.5px;z-index:60;
   box-shadow:var(--shadow);animation:fade .2s;max-width:calc(100% - 32px)}
@@ -582,6 +618,19 @@ function applyShared(id, key, d, canEdit){
   save();
   return cid;
 }
+/* ?setup=保管庫ID を開くと、その端末を保管庫につなぐ。
+   URLを手で貼らずに済ませるための一度きりの入口。 */
+function loadSetup(){
+  const id = new URLSearchParams(location.search).get("setup");
+  if (!id || !/^[\w-]+$/.test(id)) return false;
+  DB.syncId = id;
+  save();
+  history.replaceState(null, "", location.pathname);
+  render();
+  toast("保管庫につながりました");
+  return true;
+}
+
 function loadShared(){
   const q = new URLSearchParams(location.search);
   const p = q.get("s") || q.get("e");
@@ -2409,6 +2458,7 @@ document.addEventListener("change", e=>{
 });
 
 render();
+loadSetup();
 loadShared();
 refreshShared(true);
 </script>

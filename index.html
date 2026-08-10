@@ -942,14 +942,14 @@ function viewHome(){
         </div>
         ${DB.backupKey ? `
           <p class="muted" style="margin:0;font-size:11.5px">記録するたび、自動で控えが保存されます。</p>
-          <button class="btn sm wide" data-restore-backup>控えから元に戻す</button>`
+          <div class="row" style="gap:8px">
+            <button class="btn sm" style="flex:1" data-restore-backup>復元</button>
+            <button class="btn sm" style="flex:1" data-export>手動でバックアップ</button>
+          </div>`
         : `<p class="muted" style="margin:0;font-size:11.5px">
              有効にすると、記録するたび自動で控えが保存されます。端末を変えても戻せます。</p>
-           <button class="btn sm wide" data-start-backup>自動バックアップを有効にする</button>`}
-        <div class="row" style="justify-content:center;gap:16px">
-          <button class="btn ghost sm" data-export>手動で書き出す</button>
-          <button class="btn ghost sm" data-import>貼り付けて読み込む</button>
-        </div>
+           <button class="btn sm wide" data-start-backup>自動バックアップを有効にする</button>
+           <button class="btn ghost sm wide" data-export>手動でバックアップ</button>`}
       </div>
       ${DB.communities.some(c=>c.members.some(m=>m.isMe)) ? "" : DB.communities.length ?
         `<p class="muted" style="text-align:center">メンバーの1人を「自分」に設定すると、ここに自分の成績が出ます</p>` : ""}
@@ -1721,7 +1721,7 @@ function sheetConfirm(){
 
 function sheetData(){
   if (sheet.mode === "export"){
-    return `<div class="sheet-hd"><h3>データを書き出す</h3>
+    return `<div class="sheet-hd"><h3>手動でバックアップ</h3>
         <button class="btn ghost sm" data-close-sheet>閉じる</button></div>
       <div class="sheet-body stack">
         <p class="muted" style="margin:0">この文字列がデータそのものです。メモやメールに貼って保管してください。</p>
@@ -1729,9 +1729,10 @@ function sheetData(){
           >${esc(JSON.stringify(DB))}</textarea>
         <button class="btn wide primary" data-copy>コピーする</button>
         <button class="btn wide" data-download>ファイルとして保存</button>
+        <button class="btn wide ghost" data-import>書き出した文字から戻す</button>
       </div>`;
   }
-  return `<div class="sheet-hd"><h3>データを読み込む</h3>
+  return `<div class="sheet-hd"><h3>書き出した文字から戻す</h3>
       <button class="btn ghost sm" data-close-sheet>閉じる</button></div>
     <div class="sheet-body stack">
       <p class="muted" style="margin:0">書き出した文字列を貼り付けてください。今のデータは置き換わります。</p>

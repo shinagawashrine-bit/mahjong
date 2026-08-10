@@ -4,8 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>麻雀成績</title>
-<meta name="theme-color" content="#E4E4DA" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0E1A16" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#E4E4DA">
+<meta name="color-scheme" content="light">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="麻雀成績">
 <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%80%84%3C/text%3E%3C/svg%3E">
@@ -22,32 +22,7 @@
   --sans:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;
   --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP",serif;
   --shadow:0 1px 2px rgba(26,36,32,.06),0 6px 20px rgba(26,36,32,.06);
-}
-@media (prefers-color-scheme:dark){
-  :root{
-    --bg:#0E1A16; --surface:#16241E; --surface-2:#1C2E27; --line:#2C4238; --line-soft:#23352D;
-    --ink:#E6EBE7; --ink-2:#A6B5AE; --ink-3:#7A8B84;
-    --accent:#D9614A; --accent-soft:#33221E;
-    --r1:#D8B24A; --r2:#A8ABAF; --r3:#C4844A; --r4:#6B93C4; --r5:#A0958A; --r6:#8394A0;
-    --good:#63A17F; --bad:#C4573F;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#0E1A16; --surface:#16241E; --surface-2:#1C2E27; --line:#2C4238; --line-soft:#23352D;
-  --ink:#E6EBE7; --ink-2:#A6B5AE; --ink-3:#7A8B84;
-  --accent:#D9614A; --accent-soft:#33221E;
-  --r1:#D8B24A; --r2:#A8ABAF; --r3:#C4844A; --r4:#6B93C4; --r5:#A0958A; --r6:#8394A0;
-  --good:#63A17F; --bad:#C4573F;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
-}
-:root[data-theme="light"]{
-  --bg:#E4E4DA; --surface:#F5F4EE; --surface-2:#EBEAE1; --line:#C9CCC2; --line-soft:#DBDCD3;
-  --ink:#1A2420; --ink-2:#4E5B55; --ink-3:#7C8781;
-  --accent:#A93A2A; --accent-soft:#F0DDD8;
-  --r1:#A07C0C; --r2:#7F8286; --r3:#A05A2C; --r4:#2E4A72; --r5:#7C7266; --r6:#5F6E76;
-  --good:#3F7355; --bad:#9C3A2B;
-  --shadow:0 1px 2px rgba(26,36,32,.06),0 6px 20px rgba(26,36,32,.06);
+  color-scheme: light;   /* 端末が夜モードでも暗くしない */
 }
 
 *{box-sizing:border-box}

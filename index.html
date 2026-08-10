@@ -918,10 +918,12 @@ function viewCommunity(){
       <button class="tab" role="tab" aria-selected="${tab==="log"}" data-tab="log">記録</button>
       ${c.readOnly ? "" :
         `<button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>`}
-      ${c.share ? `<button class="tab" role="tab" data-refresh-share>更新</button>` : ""}
+
     </div>
     ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧のみ）" : "共有された記録です（入力できます）"}${
-        c.syncAt ? ` · ${new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}</p>` : ""}
+        c.syncAt ? ` · ${new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}
+        <button class="btn ghost sm" data-refresh-share
+          style="padding:1px 8px;font-size:11px;margin-left:6px">${SHARE_STATE || "今すぐ読み込む"}</button></p>` : ""}
     ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
 }
 
@@ -1223,6 +1225,7 @@ function tabSettings(c){
             2人が同時に入力すると、あとから送られた方で上書きされます。</p>
           <div class="row" style="gap:8px;margin-top:10px">
             <button class="btn sm" data-push-share>今すぐ送る</button>
+            <button class="btn sm" data-refresh-share>今すぐ受け取る</button>
             <button class="btn ghost sm danger" data-stop-share>共有をやめる</button>
           </div>
           ${SHARE_STATE ? `<p class="muted" style="margin:6px 0 0;font-size:11.5px">${esc(SHARE_STATE)}</p>` : ""}`

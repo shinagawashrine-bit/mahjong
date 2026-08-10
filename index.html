@@ -355,7 +355,7 @@ function round56(x){
   return s * Math.ceil(Math.abs(x) - 0.5 - 1e-9);
 }
 
-// points: 席順(起家から)の最終持ち点。同点は上家(起家に近い方)が上位。
+// points: 席順(起家から)の最終持ち点。並びが同じなら上家(起家に近い方)を上位とする。
 function calcGame(points, rules){
   const n = points.length;
   const order = points.map((p,i)=>({p,i}))
@@ -364,16 +364,35 @@ function calcGame(points, rules){
   order.forEach((o,r)=>{ ranks[o.i] = r; });
 
   const oka = (rules.returnPoints - rules.startPoints) * n / 1000;
+  const rankPt = new Array(n);   // 順位点（ウマ＋オカ）
+
+  if (rules.tieBreak === "split"){
+    // 同点の人たちは、その順位ぶんの順位点を足して山分けする
+    let k = 0;
+    while (k < n){
+      let j = k;
+      while (j+1 < n && order[j+1].p === order[k].p) j++;
+      let total = 0;
+      for (let r = k; r <= j; r++) total += (rules.uma[r] ?? 0) + (r === 0 ? oka : 0);
+      const cnt = j - k + 1;
+      const share = Math.round(total/cnt*10)/10;
+      for (let r = k; r <= j; r++) rankPt[order[r].i] = share;
+      // 割り切れないぶんは同点者のうち上家に寄せる（合計を保つため）
+      rankPt[order[k].i] = Math.round((rankPt[order[k].i] + total - share*cnt)*10)/10;
+      k = j + 1;
+    }
+  } else {
+    for (let r = 0; r < n; r++) rankPt[order[r].i] = (rules.uma[r] ?? 0) + (r === 0 ? oka : 0);
+  }
+
   const scores = new Array(n);
   let sum = 0;
   for (let i=0;i<n;i++){
-    let s = round56((points[i] - rules.returnPoints) / 1000);
-    s += (rules.uma[ranks[i]] ?? 0);
-    if (ranks[i] === 0) s += oka;
-    scores[i] = s;
-    sum += s;
+    scores[i] = round56((points[i] - rules.returnPoints) / 1000) + rankPt[i];
+    sum += scores[i];
   }
-  scores[order[0].i] -= sum; // 端数はトップが吸収して合計を必ず 0 にする
+  // 素点の丸め誤差はトップが吸収して、合計を必ず 0 にする
+  scores[order[0].i] = Math.round((scores[order[0].i] - sum)*10)/10;
   return {ranks, scores};
 }
 
@@ -386,7 +405,8 @@ function defaultRules(playerCount){
     uma: UMA_PRESETS[n][1].uma.slice(),
     rate: 100,
     chipPoints: 2,
-    chipStart: 20
+    chipStart: 20,
+    tieBreak: "seat"
   };
 }
 
@@ -561,7 +581,11 @@ function sessionTotals(s){
 const esc = s => String(s).replace(/[&<>"']/g, m =>
   ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const yen = n => (n<0?"−":"") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
-const signed = n => (n>0?"+":n<0?"−":"") + Math.abs(n);
+// 山分けで小数が出ることがあるので、小数第1位まで見せる
+const signed = n => {
+  const r = Math.round(n*10)/10;
+  return (r>0?"+":r<0?"−":"") + Math.abs(r);
+};
 const pct = n => Math.round(n*100) + "%";
 const cls = n => n>0 ? "plus" : n<0 ? "minus" : "";
 const today = () => {
@@ -965,6 +989,11 @@ function tabSettings(c){
       </div>
       <label class="fld">チップの持ち枚数（1人が最初に持つ枚数）
         <input inputmode="numeric" value="${chipStart(c)}" data-rule="chipStart"></label>
+      <label class="fld">同点で終わったとき
+        <select data-rule="tieBreak">
+          <option value="seat" ${(r.tieBreak||"seat")==="seat"?"selected":""}>上家優先（起家に近い人が上位）</option>
+          <option value="split" ${r.tieBreak==="split"?"selected":""}>順位点を山分け</option>
+        </select></label>
       <p class="muted">ルールを変えると過去の記録も新しいルールで再計算されます。</p>
     </div>
 
@@ -1832,6 +1861,11 @@ document.addEventListener("change", e=>{
     const c = community(V.id);
     if (val.trim()){ c.name = val.trim(); save(); render(); }
     return;
+  }
+  if (d.rule === "tieBreak"){
+    const c = community(V.id);
+    c.rules.tieBreak = val === "split" ? "split" : "seat";
+    save(); return render();
   }
   if (d.rule){
     const c = community(V.id);

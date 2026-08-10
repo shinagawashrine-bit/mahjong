@@ -329,6 +329,16 @@ try {
   } catch(e){}
 }
 
+// ルールの控えがない古い記録には、今のルールを焼き付けておく（以後ずれない）
+{
+  let changed = false;
+  DB.sessions.forEach(s=>{
+    const c = DB.communities.find(x=>x.id===s.communityId);
+    if (c && !s.rules){ s.rules = JSON.parse(JSON.stringify(c.rules)); changed = true; }
+  });
+  if (changed) setTimeout(()=>save(), 0);
+}
+
 function save(){
   const text = JSON.stringify(Object.assign({}, DB, {savedAt: new Date().toISOString()}));
   SAVED_AT = new Date().toISOString();
@@ -676,7 +686,7 @@ function viewHome(){
   const cards = DB.communities.map(c=>{
     const st = statsOf(c.id);
     const me = c.members.find(m=>m.isMe);
-    const total = Object.values(st).reduce((a,s)=>a+s.games,0) / (c.rules.playerCount||4);
+    const total = sessionsOf(c.id).reduce((a,s)=>a+s.games.length, 0);
     const mine = me ? st[me.id] : null;
     return `<button class="card lrow" style="padding:0;display:block" data-go-community="${c.id}">
       <div class="card-p">
@@ -1721,10 +1731,19 @@ document.addEventListener("click", e=>{
   }
   if (d.delMember){
     const c = community(V.id);
-    const used = DB.sessions.some(s=> s.communityId===c.id &&
-      (s.games.some(g=>g.seats.includes(d.delMember)) || s.participantIds.includes(d.delMember)));
+    const id = d.delMember;
+    // 「その日の参加者に入っている」だけでは記録とみなさない。
+    // 実際に打ったか、チップ・祝儀・ペナルティに値が入っている人だけを守る
+    const used = DB.sessions.some(s=> s.communityId===c.id && (
+      s.games.some(g=>g.seats.includes(id)) ||
+      (s.chipCounts||{})[id] != null ||
+      ((s.penalties||{})[id] || 0) !== 0 ||
+      (s.tips||[]).some(t=>t.toId===id || t.fromIds.includes(id))));
     if (used) return toast("記録に使われているので削除できません");
-    c.members = c.members.filter(m=>m.id!==d.delMember);
+    c.members = c.members.filter(m=>m.id!==id);
+    if (c.carry) delete c.carry[id];
+    DB.sessions.forEach(x=>{ if (x.communityId===c.id)
+      x.participantIds = x.participantIds.filter(p=>p!==id); });
     save(); return render();
   }
   if (d.umaPreset){
@@ -1798,7 +1817,10 @@ document.addEventListener("click", e=>{
     carrySign[k] = next;
     const v = (c.carry||{})[d.carrySign];
     if (v){ c.carry[d.carrySign] = Math.abs(v) * next; save(); }
-    return render();
+    render();
+    const back = document.querySelector(`[data-carry="${d.carrySign}"]`);
+    if (back) back.focus();
+    return;
   }
 
   if (d.penSign){
@@ -1808,7 +1830,10 @@ document.addEventListener("click", e=>{
     penSign[k] = next;
     const v = (s.penalties||{})[d.penSign];
     if (v){ s.penalties[d.penSign] = Math.abs(v) * next; save(); }
-    return render();
+    render();
+    const back = document.querySelector(`[data-penalty="${d.penSign}"]`);
+    if (back) back.focus();
+    return;
   }
 
   if (d.fillRest !== undefined){
@@ -1830,7 +1855,10 @@ document.addEventListener("click", e=>{
     sheet.draft.signs[i] = -sheet.draft.signs[i];
     if (sheet.draft.points[i] != null)
       sheet.draft.points[i] = Math.abs(sheet.draft.points[i]) * sheet.draft.signs[i];
-    return renderSheet();
+    renderSheet();
+    const back = document.querySelector(`[data-pt="${i}"]`);
+    if (back) back.focus();
+    return;
   }
 
   if (d.toggleGame !== undefined){
@@ -1964,8 +1992,12 @@ document.addEventListener("change", e=>{
   }
   if (d.rule){
     const c = community(V.id);
+    // 空欄のままだと Number("") が 0 になってしまうので、先に弾いて元の値に戻す
+    if (val.trim() === "") return render();
     const num = Math.round(Number(val));
     if (isNaN(num)) return render();
+    const least = {startPoints:1000, returnPoints:1000, rate:0, chipPoints:0, chipStart:0};
+    if (d.rule in least && num < least[d.rule]) return render();
     if (d.rule === "playerCount"){
       if (num !== 3 && num !== 4) return render();
       if (DB.sessions.some(s=>s.communityId===c.id && s.games.length)){
@@ -1980,6 +2012,7 @@ document.addEventListener("change", e=>{
   }
   if (d.uma !== undefined){
     const c = community(V.id);
+    if (val.trim() === "") return render();
     const num = Math.round(Number(val));
     if (!isNaN(num)) c.rules.uma[+d.uma] = num;
     save(); return render();

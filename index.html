@@ -446,9 +446,11 @@ function pushShare(c, quiet){
     method: "POST",
     headers: {"Content-Type": "text/plain;charset=utf-8"},   // 事前確認を挟ませない
     body: JSON.stringify({k: c.share.key, data: JSON.parse(text)})
-  }).then(r=>r.json()).then(res=>{
-    if (res && res.ok){ lastPushed[c.id] = text; SHARE_STATE = ""; }
-    else SHARE_STATE = "送信できませんでした";
+  }).then(r=>{
+    // 書き込みが通っても、返ってくるのが JSON とは限らない（転送先のページが返る）。
+    // 通信が成立していれば送れたものとして扱う。
+    if (!r.ok) throw new Error("http " + r.status);
+    lastPushed[c.id] = text; SHARE_STATE = "";
     if (!quiet) render();
   }).catch(()=>{
     // 返事を読めない環境でも、書き込み自体は通ることがあるので投げ直す

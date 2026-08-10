@@ -180,8 +180,10 @@ input.neg{color:var(--bad);font-weight:600}
 .gtbl.games th:not(:first-child),.gtbl.games td:not(:first-child){text-align:center}
 .gtbl.games th{font-size:10px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gtbl.games td{font-size:12.5px}
+.gtbl.games tr[data-toggle-game]{cursor:pointer}
 .gtbl.games td:first-child,.gtbl.games th:first-child{width:1%;white-space:nowrap;
-  padding-left:0;padding-right:6px}
+  padding-left:0;padding-right:6px;position:sticky;left:0;z-index:1;background:var(--surface)}
+.gtbl.games tr.gopen td:first-child,.gtbl.games tr.ptrow td:first-child{background:var(--surface-2)}
 .gtbl.games .rp{width:18px;height:18px;font-size:10.5px}
 .gtbl.games .ptval{font-size:11px}
 .gtbl.games .ptwind{margin-left:2px;font-size:9.5px}
@@ -280,6 +282,13 @@ const UMA_PRESETS = {
   ]
 };
 
+/* iPhone の Safari は、しばらく開かないままだと保存を消してしまう。
+   ホーム画面に追加したものはその対象外なので、追加を促す。 */
+const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const isStandalone = window.navigator.standalone === true ||
+  (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+
 /* ========== storage ========== */
 function newDB(){ return {communities:[], sessions:[]}; }
 let DB = newDB();
@@ -331,10 +340,12 @@ function save(){
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
 
 /* ========== score calculation ========== */
-// 五捨六入: 0.5 は切り捨て、0.6 以上を切り上げ
+/* 五捨六入。持ち点そのものを千点単位に丸めるのと同じ扱いにする。
+   百の位が5以下なら切り捨て、6以上なら切り上げ。
+   29,500点は29,000点扱い（素点−1）で、マイナス側も数直線どおりに下げる。 */
 function round56(x){
-  const s = x < 0 ? -1 : 1;
-  return s * Math.ceil(Math.abs(x) - 0.5 - 1e-9);
+  const f = x - Math.floor(x);
+  return f >= 0.6 - 1e-9 ? Math.ceil(x) : Math.floor(x);
 }
 
 // points: 席順(起家から)の最終持ち点。並びが同じなら上家(起家に近い方)を上位とする。
@@ -672,7 +683,7 @@ function viewHome(){
         <div class="between" style="align-items:flex-start">
           <div class="grow">
             <div style="font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:.02em">${esc(c.name)}</div>
-            <div class="muted num">${Math.round(total)}半荘 · ${c.members.length}人 · ${c.rules.playerCount}人打ち</div>
+            <div class="muted num">${Math.round(total)}半荘 · ${regulars(c).length}人 · ${c.rules.playerCount}人打ち</div>
           </div>
           <span class="chev">›</span>
         </div>
@@ -699,6 +710,11 @@ function viewHome(){
       <h1 style="text-align:center">麻雀成績記録</h1>
     </div></header>
     <main class="stack">
+      ${(isIOS && !isStandalone) ? `<div class="card card-p"
+        style="border-color:var(--accent);background:var(--accent-soft)">
+        <strong style="color:var(--accent)">ホーム画面に追加して使ってください</strong>
+        <div style="font-size:13px;margin-top:4px">Safariのまま使うと、しばらく開かない間に
+          記録が消えることがあります。下の共有ボタンから「ホーム画面に追加」してください。</div></div>` : ""}
       ${(!STORAGE_OK || STORAGE_LOST) ? `<div class="card card-p" style="border-color:var(--accent);background:var(--accent-soft)">
         <strong style="color:var(--accent)">このブラウザでは記録が残りません</strong>
         <div style="font-size:13px;margin-top:4px">打っている間は使えますが、タブを閉じると消えます。
@@ -1172,7 +1188,7 @@ function viewSession(){
         const by = {};
         g.seats.forEach((mid,i)=>{ by[mid] = {r:ranks[i]+1, s:scores[i], p:g.points[i], w:WINDS[i]}; });
         const open = (V.openGames || []).includes(gi);
-        return `<tr class="${open?"gopen":""}">
+        return `<tr class="${open?"gopen":""}" data-toggle-game="${gi}">
           <td><span class="gamecell">
             <button class="btn ghost sm" data-toggle-game="${gi}"
               style="padding:2px 4px;font-size:11px">半荘${gi+1} ${open?"▾":"›"}</button>
@@ -1280,7 +1296,7 @@ function viewSession(){
     </div></header>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="${tab==="score"}" data-stab="score">成績</button>
-      <button class="tab" role="tab" aria-selected="${tab==="setup"}" data-stab="setup">チップ</button>
+      <button class="tab" role="tab" aria-selected="${tab==="setup"}" data-stab="setup">精算</button>
       <button class="tab" role="tab" aria-selected="${tab==="data"}" data-stab="data">データ</button>
     </div>
     ${tab==="score" ? scoreTab : tab==="setup" ? setupTab : dataTab()}`;
@@ -1532,6 +1548,7 @@ function updateTally(){
   const el = document.querySelector(".sheet");
   if (!el || !sheet || sheet.kind !== "game") return;
   const s = DB.sessions.find(x=>x.id===V.id);
+  const c = community(s.communityId);
   const R = rulesOf(s);
   const n = R.playerCount;
   const target = R.startPoints * n;
@@ -1604,7 +1621,7 @@ function openGameSheet(index){
 
 /* ========== events ========== */
 document.addEventListener("click", e=>{
-  const t = e.target.closest("button,[data-close-sheet]");
+  const t = e.target.closest("button,[data-close-sheet],[data-toggle-game]");
   if (!t) return;
   const d = t.dataset;
 

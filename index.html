@@ -430,9 +430,18 @@ function defaultRules(playerCount){
    入力する人の端末が本体で、預けるのはその写し。
    共有リンクを開いた人だけが読める（合言葉がリンクに入っている）。 */
 const scriptUrl = id => `https://script.google.com/macros/s/${id}/exec`;
+
+/* いつもの保管庫。リンクにIDを載せずに済ませるための既定値。
+   別の保管庫を使っている場合だけ、リンクにIDを含める。 */
+const DEFAULT_SCRIPT_ID =
+  "AKfycbyx4wvBOwWha7YM2xLRwyCEILSU1Ktx9iGJH0OfEaD7oCFNClRh_9JPgWGL6AFJcnAp";
+
 const shareScriptId = c => (c.share && c.share.id) || DB.syncId;
-const shareLink = (c, edit) =>
-  location.origin + location.pathname + "?s=" + shareScriptId(c) + "." + c.share.key + (edit ? ".e" : "");
+const shareLink = (c, edit) => {
+  const id = shareScriptId(c);
+  const tail = (id === DEFAULT_SCRIPT_ID) ? c.share.key : id + "." + c.share.key;
+  return location.origin + location.pathname + "?" + (edit ? "e" : "s") + "=" + tail;
+};
 
 let SHARE_STATE = "";          // 送信の状態を画面に出すため
 const lastPushed = {};
@@ -531,10 +540,14 @@ function applyShared(id, key, d, canEdit){
   return cid;
 }
 function loadShared(){
-  const p = new URLSearchParams(location.search).get("s");
+  const q = new URLSearchParams(location.search);
+  const p = q.get("s") || q.get("e");
   if (!p) return;
   const bits = p.split(".");
-  const id = bits[0], key = bits[1], canEdit = bits[2] === "e";
+  // 「合言葉だけ」「ID.合言葉」「ID.合言葉.e」のどれでも読めるようにする
+  const id  = bits.length === 1 ? DEFAULT_SCRIPT_ID : bits[0];
+  const key = bits.length === 1 ? bits[0] : bits[1];
+  const canEdit = q.has("e") || bits[2] === "e";
   if (!id || !key) return;
   SHARED_LOADING = true; SHARED_ERROR = ""; render();
   fetch(scriptUrl(id) + "?k=" + encodeURIComponent(key))
@@ -1838,7 +1851,9 @@ document.addEventListener("click", e=>{
   if (d.startShare !== undefined){
     const c = community(V.id);
     const begin = ()=>{
-      c.share = {key: uid() + uid(), id: DB.syncId};   // 合言葉と保管庫
+      // 合言葉は10文字。リンクを短く保ちつつ、当てずっぽうでは届かない長さ
+      const rnd = () => Math.random().toString(36).slice(2);
+      c.share = {key: (rnd()+rnd()).slice(0,10), id: DB.syncId};
       save(); render();
       pushShare(c);
     };

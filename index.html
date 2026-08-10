@@ -249,6 +249,11 @@ input.neg{color:var(--bad);font-weight:600}
   padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit;color:var(--ink-2)}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .chiprow{display:flex;gap:7px;flex-wrap:wrap}
+.sharebox{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:8px;
+  padding:9px 11px;font-size:11px;word-break:break-all;line-height:1.5;color:var(--ink-2);
+  font-family:ui-monospace,monospace}
+.viewonly{margin:0;padding:8px 16px;background:var(--surface-2);border-bottom:1px solid var(--line-soft);
+  font-size:11.5px;color:var(--ink-2);text-align:center}
 .guesttag{font-size:9.5px;margin-left:5px;opacity:.75;border:1px solid currentColor;
   border-radius:3px;padding:0 3px;vertical-align:1px}
 
@@ -346,6 +351,7 @@ function save(){
   const ok = writeStore(localStorage, text);
   if (!ok && STORAGE_OK){ STORAGE_OK = false; toast("保存できませんでした。空き容量を確認してください"); }
   try { localStorage.setItem(KEY + "__everSaved", "1"); } catch(e){}
+  if (typeof queueShare === "function") queueShare();
 }
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
 
@@ -411,6 +417,93 @@ function defaultRules(playerCount){
     chipStart: 20,
     tieBreak: "seat"
   };
+}
+
+/* ========== 共有 ==========
+   スプレッドシートを置き場所にして、コミュニティ単位でデータを預ける。
+   入力する人の端末が本体で、預けるのはその写し。
+   共有リンクを開いた人だけが読める（合言葉がリンクに入っている）。 */
+const scriptUrl = id => `https://script.google.com/macros/s/${id}/exec`;
+const shareLink = c => location.origin + location.pathname + "?s=" + DB.syncId + "." + c.share.key;
+
+let SHARE_STATE = "";          // 送信の状態を画面に出すため
+const lastPushed = {};
+
+function sharePayload(c){
+  return {
+    name: c.name, rules: c.rules, carry: c.carry || {}, members: c.members,
+    sessions: DB.sessions.filter(s=>s.communityId===c.id),
+    at: new Date().toISOString()
+  };
+}
+
+function pushShare(c, quiet){
+  if (!DB.syncId || !c.share || c.readOnly) return Promise.resolve();
+  const text = JSON.stringify(sharePayload(c));
+  if (lastPushed[c.id] === text) return Promise.resolve();
+  if (!quiet){ SHARE_STATE = "送信中"; render(); }
+  return fetch(scriptUrl(DB.syncId), {
+    method: "POST",
+    headers: {"Content-Type": "text/plain;charset=utf-8"},   // 事前確認を挟ませない
+    body: JSON.stringify({k: c.share.key, data: JSON.parse(text)})
+  }).then(r=>r.json()).then(res=>{
+    if (res && res.ok){ lastPushed[c.id] = text; SHARE_STATE = ""; }
+    else SHARE_STATE = "送信できませんでした";
+    if (!quiet) render();
+  }).catch(()=>{
+    // 返事を読めない環境でも、書き込み自体は通ることがあるので投げ直す
+    return fetch(scriptUrl(DB.syncId), {
+      method: "POST", mode: "no-cors",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({k: c.share.key, data: JSON.parse(text)})
+    }).then(()=>{ lastPushed[c.id] = text; SHARE_STATE = ""; if (!quiet) render(); })
+      .catch(()=>{ SHARE_STATE = "送信できませんでした"; if (!quiet) render(); });
+  });
+}
+
+// 記録が変わったら、共有中のコミュニティにまとめて送る
+let pushTimer = null;
+function queueShare(){
+  if (!DB.syncId) return;
+  clearTimeout(pushTimer);
+  pushTimer = setTimeout(()=>{
+    DB.communities.filter(c=>c.share && !c.readOnly).forEach(c=>pushShare(c, true));
+  }, 1200);
+}
+
+/* 共有リンクで開かれたときは、預けてある写しを読んで閲覧専用として並べる */
+let SHARED_LOADING = false, SHARED_ERROR = "";
+function applyShared(key, d){
+  const cid = "shared_" + key;
+  const c = {id:cid, name:d.name, members:d.members, rules:d.rules,
+             carry:d.carry || {}, share:{key}, readOnly:true, sharedAt:d.at};
+  DB.communities = DB.communities.filter(x=>x.id!==cid).concat([c]);
+  DB.sessions = DB.sessions.filter(s=>s.communityId!==cid).concat(
+    (d.sessions||[]).map(s=>Object.assign({}, s, {id:cid+"_"+s.id, communityId:cid})));
+  save();
+  return cid;
+}
+function loadShared(){
+  const p = new URLSearchParams(location.search).get("s");
+  if (!p) return;
+  const dot = p.indexOf(".");
+  if (dot < 0) return;
+  const id = p.slice(0, dot), key = p.slice(dot+1);
+  if (!id || !key) return;
+  SHARED_LOADING = true; SHARED_ERROR = ""; render();
+  fetch(scriptUrl(id) + "?k=" + encodeURIComponent(key))
+    .then(r=>r.json())
+    .then(d=>{
+      if (!d || d.error || !d.name) throw new Error(d && d.error || "empty");
+      const cid = applyShared(key, d);
+      SHARED_LOADING = false;
+      go({name:"community", id:cid, tab:"stats"});
+    })
+    .catch(()=>{
+      SHARED_LOADING = false;
+      SHARED_ERROR = "共有された記録を読み込めませんでした";
+      render();
+    });
 }
 
 /* ========== derived data ========== */
@@ -720,6 +813,11 @@ function viewHome(){
       <h1 style="text-align:center">麻雀成績記録</h1>
     </div></header>
     <main class="stack">
+      ${SHARED_LOADING ? `<div class="card card-p" style="text-align:center">共有された記録を読み込んでいます…</div>` : ""}
+      ${SHARED_ERROR ? `<div class="card card-p" style="border-color:var(--accent);background:var(--accent-soft)">
+        <strong style="color:var(--accent)">${esc(SHARED_ERROR)}</strong>
+        <div style="font-size:13px;margin-top:4px">リンクが古いか、共有が止められている可能性があります。
+          送った人に確認してください。</div></div>` : ""}
       ${(isIOS && !isStandalone) ? `<div class="card card-p"
         style="border-color:var(--accent);background:var(--accent-soft)">
         <strong style="color:var(--accent)">ホーム画面に追加して使ってください</strong>
@@ -756,8 +854,11 @@ function viewCommunity(){
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="${tab==="stats"}" data-tab="stats">成績</button>
       <button class="tab" role="tab" aria-selected="${tab==="log"}" data-tab="log">記録</button>
-      <button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>
+      ${c.readOnly ? "" :
+        `<button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>`}
     </div>
+    ${c.readOnly ? `<p class="viewonly">共有された記録です（閲覧のみ）${
+        c.sharedAt ? ` · ${new Date(c.sharedAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}</p>` : ""}
     ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
 }
 
@@ -959,7 +1060,7 @@ function tabLog(c){
       ${ss.length ? `<div class="card">${rows}</div>`
         : `<div class="empty">まだ記録がありません。</div>`}
     </main>
-    <button class="btn primary fab" data-new-session>＋ 今日の卓を始める</button>`;
+    ${c.readOnly ? "" : `<button class="btn primary fab" data-new-session>＋ 今日の卓を始める</button>`}`;
 }
 
 function tabSettings(c){
@@ -1041,6 +1142,21 @@ function tabSettings(c){
     <div class="card card-p stack">
       <h2 class="sec">コミュニティ</h2>
       <label class="fld">名前<input value="${esc(c.name)}" data-community-name></label>
+      <div>
+        <div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">共有</div>
+        ${c.share ? `
+          <div class="sharebox">${esc(shareLink(c))}</div>
+          <div class="row" style="gap:8px;margin-top:8px">
+            <button class="btn sm" data-copy-share>リンクをコピー</button>
+            <button class="btn sm" data-push-share>今すぐ送る</button>
+            <button class="btn ghost sm danger" data-stop-share>共有をやめる</button>
+          </div>
+          <p class="muted" style="margin:6px 0 0;font-size:11.5px">
+            ${SHARE_STATE ? esc(SHARE_STATE) : "このリンクを開いた人が、このコミュニティの成績を見られます（閲覧のみ）。"}</p>`
+        : `<button class="btn sm" data-start-share>共有をはじめる</button>
+           <p class="muted" style="margin:6px 0 0;font-size:11.5px">
+             リンクを渡した人が、このコミュニティの成績を見られるようになります。</p>`}
+      </div>
       <button class="btn danger" data-del-community style="border:1px solid var(--line)">このコミュニティを削除</button>
     </div>
   </main>`;
@@ -1202,7 +1318,7 @@ function viewSession(){
           <td><span class="gamecell">
             <button class="btn ghost sm" data-toggle-game="${gi}"
               style="padding:2px 4px;font-size:11px">半荘${gi+1} ${open?"▾":"›"}</button>
-            ${open ? `<button class="btn editlink" data-edit-game="${gi}">修正</button>` : ""}
+            ${open && !c.readOnly ? `<button class="btn editlink" data-edit-game="${gi}">修正</button>` : ""}
           </span></td>
           ${parts.map(mid=> by[mid]
             ? `<td><span class="row" style="justify-content:center;gap:4px">
@@ -1230,8 +1346,8 @@ function viewSession(){
 
       <div><p class="eyebrow" style="padding:0 2px">半荘ごとの成績</p>${gamesTbl}</div>
     </main>
-    <button class="btn primary fab" data-add-game
-      ${parts.length < n ? "disabled style='opacity:.5'" : ""}>＋ 半荘を追加</button>`;
+    ${c.readOnly ? "" : `<button class="btn primary fab" data-add-game
+      ${parts.length < n ? "disabled style='opacity:.5'" : ""}>＋ 半荘を追加</button>`}`;
 
   const setupTab = `<main class="stack">
       <div class="card card-p">
@@ -1306,10 +1422,11 @@ function viewSession(){
     </div></header>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="${tab==="score"}" data-stab="score">成績</button>
-      <button class="tab" role="tab" aria-selected="${tab==="setup"}" data-stab="setup">精算</button>
+      ${c.readOnly ? "" :
+        `<button class="tab" role="tab" aria-selected="${tab==="setup"}" data-stab="setup">精算</button>`}
       <button class="tab" role="tab" aria-selected="${tab==="data"}" data-stab="data">データ</button>
     </div>
-    ${tab==="score" ? scoreTab : tab==="setup" ? setupTab : dataTab()}`;
+    ${tab==="score" ? scoreTab : (tab==="setup" && !c.readOnly) ? setupTab : dataTab()}`;
 
   /* ---- データタブ：その日ぶんだけを詳しく見る ---- */
   function dataTab(){
@@ -1655,6 +1772,47 @@ document.addEventListener("click", e=>{
     const start = (order.indexOf(sheet.draft.seats[0]) + 1) % order.length;
     sheet.draft.seats = Array.from({length:n}, (_,i)=> order[(start+i)%order.length]);
     return renderSheet();
+  }
+
+  if (d.startShare !== undefined){
+    const c = community(V.id);
+    const begin = ()=>{
+      c.share = {key: uid() + uid()};   // リンクに入れる合言葉
+      save(); render();
+      pushShare(c);
+    };
+    if (DB.syncId) return begin();
+    return askText("共有をはじめる",
+      "スプレッドシートで発行したウェブアプリのURL", "", "つなぐ", url=>{
+        const m = url.match(/\/macros\/s\/([\w-]+)\/exec/);
+        if (!m){ toast("URLの形が違います。/exec で終わるものを貼ってください"); return false; }
+        DB.syncId = m[1]; save();
+        begin();
+      });
+  }
+  if (d.copyShare !== undefined){
+    const c = community(V.id);
+    const text = shareLink(c);
+    if (navigator.clipboard && navigator.clipboard.writeText)
+      navigator.clipboard.writeText(text).then(()=>toast("コピーしました"),
+        ()=>toast("長押しで選択してコピーしてください"));
+    else toast("長押しで選択してコピーしてください");
+    return;
+  }
+  if (d.pushShare !== undefined){
+    const c = community(V.id);
+    lastPushed[c.id] = null;
+    pushShare(c).then(()=>{ if (!SHARE_STATE) toast("最新の状態を送りました"); });
+    return;
+  }
+  if (d.stopShare !== undefined){
+    const c = community(V.id);
+    return askConfirm("共有をやめる",
+      "リンクを開いても見られなくなります。手元の記録は消えません。", "やめる", ()=>{
+        delete c.share; delete lastPushed[c.id];
+        save(); go({name:"community", id:c.id, tab:"settings"});
+        toast("共有をやめました");
+      });
   }
 
   if (d.applyRulesToPast !== undefined){
@@ -2063,6 +2221,7 @@ document.addEventListener("change", e=>{
 });
 
 render();
+loadShared();
 </script>
 </body>
 </html>

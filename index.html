@@ -1,0 +1,1906 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>麻雀成績</title>
+<meta name="theme-color" content="#E4E4DA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0E1A16" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="麻雀成績">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%80%84%3C/text%3E%3C/svg%3E">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%80%84%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<style>
+:root{
+  --bg:#E4E4DA; --surface:#F5F4EE; --surface-2:#EBEAE1; --line:#C9CCC2; --line-soft:#DBDCD3;
+  --ink:#1A2420; --ink-2:#4E5B55; --ink-3:#7C8781;
+  --accent:#A93A2A; --accent-soft:#F0DDD8;
+  --r1:#A07C0C; --r2:#7F8286; --r3:#A05A2C; --r4:#2E4A72; --r5:#7C7266; --r6:#5F6E76;
+  --good:#3F7355; --bad:#9C3A2B;
+  --sans:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic","Noto Sans JP",sans-serif;
+  --serif:"Hiragino Mincho ProN","Yu Mincho",YuMincho,"Noto Serif JP",serif;
+  --shadow:0 1px 2px rgba(26,36,32,.06),0 6px 20px rgba(26,36,32,.06);
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#0E1A16; --surface:#16241E; --surface-2:#1C2E27; --line:#2C4238; --line-soft:#23352D;
+    --ink:#E6EBE7; --ink-2:#A6B5AE; --ink-3:#7A8B84;
+    --accent:#D9614A; --accent-soft:#33221E;
+    --r1:#D8B24A; --r2:#A8ABAF; --r3:#C4844A; --r4:#6B93C4; --r5:#A0958A; --r6:#8394A0;
+    --good:#63A17F; --bad:#C4573F;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1A16; --surface:#16241E; --surface-2:#1C2E27; --line:#2C4238; --line-soft:#23352D;
+  --ink:#E6EBE7; --ink-2:#A6B5AE; --ink-3:#7A8B84;
+  --accent:#D9614A; --accent-soft:#33221E;
+  --r1:#D8B24A; --r2:#A8ABAF; --r3:#C4844A; --r4:#6B93C4; --r5:#A0958A; --r6:#8394A0;
+  --good:#63A17F; --bad:#C4573F;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+}
+:root[data-theme="light"]{
+  --bg:#E4E4DA; --surface:#F5F4EE; --surface-2:#EBEAE1; --line:#C9CCC2; --line-soft:#DBDCD3;
+  --ink:#1A2420; --ink-2:#4E5B55; --ink-3:#7C8781;
+  --accent:#A93A2A; --accent-soft:#F0DDD8;
+  --r1:#A07C0C; --r2:#7F8286; --r3:#A05A2C; --r4:#2E4A72; --r5:#7C7266; --r6:#5F6E76;
+  --good:#3F7355; --bad:#9C3A2B;
+  --shadow:0 1px 2px rgba(26,36,32,.06),0 6px 20px rgba(26,36,32,.06);
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);
+  font-size:15px;line-height:1.6;-webkit-text-size-adjust:100%;
+  font-feature-settings:"palt" 1;}
+#app{max-width:520px;margin:0 auto;min-height:100vh;background:var(--bg);
+  padding:0 0 96px;}
+.num{font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+
+/* ---- header ---- */
+header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--line-soft);}
+/* 右端は表示中のページに重なるボタンが載るので、その分だけ空けておく */
+.hd{display:flex;align-items:center;gap:10px;padding:12px 52px 12px 16px;min-height:56px}
+/* 左右の余白を揃えて、見出しを画面の真ん中に置く */
+.hd.center{padding-left:52px;justify-content:center}
+.hd h1{font-family:var(--serif);font-size:18px;font-weight:600;margin:0;letter-spacing:.02em;
+  flex:1;min-width:0;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hd .sub{font-size:11px;color:var(--ink-3);letter-spacing:.1em;margin:0}
+.back{appearance:none;border:0;background:none;color:var(--ink-2);font-size:15px;
+  padding:6px 4px 6px 0;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:2px}
+.back:hover{color:var(--accent)}
+/* 日付は見出しの見た目のまま、上に透明な日付入力を重ねてタップで選べるようにする */
+.datepick{position:relative;display:inline-flex;align-items:center;gap:5px;margin-left:auto;
+  font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.datepick .caret{font-size:11px;color:var(--ink-3);font-family:var(--sans)}
+.datepick input{position:absolute;inset:-8px;width:auto;height:auto;opacity:0;
+  border:0;padding:0;margin:0;background:none;cursor:pointer}
+.datepick:focus-within{color:var(--accent)}
+.datepick:focus-within .caret{color:var(--accent)}
+
+/* ---- generic ---- */
+main{padding:16px}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;align-items:center;gap:10px}
+.between{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.card{background:var(--surface);border:1px solid var(--line-soft);border-radius:10px;
+  box-shadow:var(--shadow);overflow:hidden}
+.card-p{padding:14px 16px}
+.eyebrow{font-size:10.5px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  font-weight:600;margin:0 0 8px}
+h2.sec{font-family:var(--serif);font-size:16px;font-weight:600;margin:0;letter-spacing:.03em}
+.muted{color:var(--ink-3);font-size:13px}
+.empty{text-align:center;padding:44px 20px;color:var(--ink-3);font-size:14px;line-height:1.9}
+
+button{font-family:inherit}
+.btn{appearance:none;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:8px;padding:10px 16px;font-size:14.5px;font-weight:500;cursor:pointer;
+  transition:.14s;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{border-color:var(--ink-3)}
+.btn:active{transform:translateY(1px)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn.ghost{background:none;border-color:transparent;color:var(--ink-2)}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.wide{width:100%}
+.btn.sm{padding:6px 11px;font-size:13px;border-radius:7px}
+.btn.danger{color:var(--bad);border-color:transparent}
+.btn:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{
+  outline:2px solid var(--accent);outline-offset:2px}
+
+input,select,textarea{font-family:inherit;font-size:16px;color:var(--ink);background:var(--surface);
+  border:1px solid var(--line);border-radius:8px;padding:9px 11px;width:100%;
+  -webkit-appearance:none;appearance:none}
+textarea{resize:vertical;line-height:1.5}
+textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--ink-3) 50%),
+  linear-gradient(135deg,var(--ink-3) 50%,transparent 50%);
+  background-position:calc(100% - 16px) 50%,calc(100% - 11px) 50%;
+  background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:32px}
+label.fld{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(--ink-2);font-weight:500}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+
+/* ---- tabs ---- */
+.tabs{display:flex;gap:2px;padding:0 16px;border-bottom:1px solid var(--line-soft);
+  background:var(--bg);position:sticky;top:56px;z-index:19}
+.tab{appearance:none;border:0;background:none;color:var(--ink-3);font-size:14px;font-weight:500;
+  padding:11px 12px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;
+  font-family:inherit}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+
+/* ---- list rows ---- */
+.lrow{display:flex;align-items:center;gap:12px;padding:13px 16px;cursor:pointer;
+  border-bottom:1px solid var(--line-soft);background:none;border-left:0;border-right:0;border-top:0;
+  width:100%;text-align:left;font-family:inherit;font-size:15px;color:var(--ink)}
+.lrow:last-child{border-bottom:0}
+.lrow:hover{background:var(--surface-2)}
+.lrow .grow{flex:1;min-width:0}
+.chev{color:var(--ink-3);font-size:16px;flex-shrink:0}
+/* 記録一覧の2行目：その日の各自のポイント（高い順） */
+.sesscores{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:4px;font-size:12px;line-height:1.5}
+.ss{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap}
+.ssname{color:var(--ink-2)}
+.ss b{font-weight:600}
+
+/* ---- stats ---- */
+.statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line-soft)}
+.stat{background:var(--surface);padding:12px 10px;text-align:center}
+.stat .k{font-size:10.5px;color:var(--ink-3);letter-spacing:.06em;margin-bottom:3px}
+.stat .v{font-size:19px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat .sub2{font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums;margin-top:2px}
+
+.rk1{background:var(--r1)} .rk2{background:var(--r2)} .rk3{background:var(--r3)} .rk4{background:var(--r4)}
+.pie{flex-shrink:0;display:block}
+.pierow{display:flex;align-items:center;gap:18px;margin-top:12px}
+.pielegend{flex:1;display:flex;flex-direction:column;gap:5px;font-size:12.5px;min-width:0}
+.pli{display:flex;align-items:center;gap:6px}
+.pli i{width:9px;height:9px;border-radius:2px;flex-shrink:0;display:block}
+.pli b{margin-left:auto;font-size:13.5px;font-variant-numeric:tabular-nums}
+.pli em{font-style:normal;color:var(--ink-3);font-size:11px;min-width:26px;text-align:right;
+  font-variant-numeric:tabular-nums}
+/* チップ・祝儀・ペナルティの入力行 */
+.ppl{padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.ppl:last-of-type{border-bottom:0}
+.ppl-name{font-size:14px;font-weight:600;margin-bottom:6px}
+.ppl-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.fld2{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--ink-3)}
+.fld2 input{text-align:right;padding:8px 10px;font-variant-numeric:tabular-nums}
+/* スマホの数字キーボードにマイナスキーがないので、符号はボタンで切り替える */
+.signed{display:flex;gap:6px;align-items:stretch}
+.signed input{flex:1;min-width:0}
+.signbtn{flex:0 0 38px;border:1px solid var(--line);background:var(--surface);border-radius:8px;
+  font-size:17px;font-weight:600;line-height:1;color:var(--ink-2);cursor:pointer;
+  font-family:inherit;padding:0;transition:.12s}
+.signbtn[aria-pressed="true"]{background:var(--bad);border-color:var(--bad);color:#fff}
+.signbtn:active{transform:scale(.94)}
+input.neg{color:var(--bad);font-weight:600}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--ink-3);margin-top:8px}
+.legend span{display:flex;align-items:center;gap:4px}
+.legend i{width:8px;height:8px;border-radius:2px;display:block}
+
+.money{font-variant-numeric:tabular-nums;font-weight:600}
+.plus{color:var(--good)} .minus{color:var(--bad)}
+
+/* rank pill */
+.rp{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  border-radius:50%;font-size:12px;font-weight:700;color:#fff;flex-shrink:0}
+.rp1{background:var(--r1)} .rp2{background:var(--r2)} .rp3{background:var(--r3)} .rp4{background:var(--r4)}
+
+/* game table */
+.gtbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.gtbl th{font-size:10.5px;color:var(--ink-3);font-weight:600;letter-spacing:.06em;
+  padding:8px 6px;text-align:right;border-bottom:1px solid var(--line-soft)}
+.gtbl th:first-child{text-align:left}
+.gtbl td{padding:7px 6px;text-align:right;border-bottom:1px solid var(--line-soft);
+  font-variant-numeric:tabular-nums}
+.gtbl td:first-child{text-align:left;color:var(--ink-2);font-size:12px;white-space:nowrap}
+.gtbl tr:last-child td{border-bottom:0}
+/* 半荘ごとの成績は4人ぶんの列が並ぶので、スマホの幅に収まるまで詰める */
+.gtbl.games th,.gtbl.games td{padding:6px 3px}
+/* 4人ぶんの列は中央ぞろえ。右端に寄って窮屈に見えるのを防ぐ */
+.gtbl.games th:not(:first-child),.gtbl.games td:not(:first-child){text-align:center}
+.gtbl.games th{font-size:10px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gtbl.games td{font-size:12.5px}
+.gtbl.games td:first-child,.gtbl.games th:first-child{width:1%;white-space:nowrap;
+  padding-left:0;padding-right:6px}
+.gtbl.games .rp{width:18px;height:18px;font-size:10.5px}
+.gtbl.games .ptval{font-size:11px}
+.gtbl.games .ptwind{margin-left:2px;font-size:9.5px}
+.gtbl.games tr.ptrow td{white-space:nowrap}
+/* 半荘の行をタップすると、終局時の点数がその下に開く */
+.gtbl tr.gopen td{background:var(--surface-2);border-bottom:0}
+.gtbl tr.ptrow td{background:var(--surface-2);padding-top:2px;padding-bottom:8px}
+.gtbl tr.ptrow td:first-child{white-space:nowrap}
+.ptval{font-variant-numeric:tabular-nums;font-size:12.5px;color:var(--ink-2)}
+.ptval.minus{color:var(--bad);font-weight:600}
+.ptwind{font-family:var(--serif);font-size:10.5px;color:var(--ink-3);margin-left:4px}
+.gamecell{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.btn.editlink{padding:1px 5px;font-size:10px;line-height:1.5;
+  color:var(--accent);border:1px solid var(--line);border-radius:5px}
+.ptlabel{display:block;font-size:12.5px;color:var(--ink-2)}
+.scroller{overflow-x:auto;-webkit-overflow-scrolling:touch}
+
+/* fab */
+.fab{position:fixed;left:50%;transform:translateX(-50%);bottom:20px;z-index:30;
+  width:min(488px,calc(100% - 32px));box-shadow:0 6px 24px rgba(0,0,0,.18)}
+
+/* sheet */
+.scrim{position:fixed;inset:0;background:rgba(10,20,16,.5);z-index:40;
+  animation:fade .18s ease}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:41;background:var(--bg);
+  border-radius:16px 16px 0 0;max-width:520px;margin:0 auto;max-height:92vh;overflow-y:auto;
+  animation:up .24s cubic-bezier(.2,.8,.3,1);padding-bottom:env(safe-area-inset-bottom)}
+@keyframes fade{from{opacity:0}}
+@keyframes up{from{transform:translateY(20px);opacity:.4}}
+@media (prefers-reduced-motion:reduce){.scrim,.sheet{animation:none}}
+.sheet-hd{position:sticky;top:0;background:var(--bg);padding:14px 16px 10px;
+  border-bottom:1px solid var(--line-soft);display:flex;align-items:center;gap:10px;z-index:2}
+.sheet-hd h3{font-family:var(--serif);font-size:17px;margin:0;flex:1;font-weight:600}
+.sheet-body{padding:16px}
+
+/* seat input */
+.seat{display:flex;align-items:center;gap:7px;padding:10px 0;border-bottom:1px solid var(--line-soft)}
+.seat .wind{font-family:var(--serif);font-size:16px;width:18px;color:var(--ink-2);flex-shrink:0}
+.seat select{flex:1;min-width:0;font-size:14px;padding:8px 10px}
+.seat .signbtn{flex:0 0 34px;height:38px}
+.seat input{width:92px;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums;
+  padding:8px 10px}
+.tally{display:flex;align-items:center;justify-content:space-between;padding:11px 12px;
+  border-radius:8px;background:var(--surface-2);font-size:13px;margin-top:12px}
+.tally.ok{background:color-mix(in srgb,var(--good) 12%,transparent);color:var(--good)}
+.tally.ng{background:var(--accent-soft);color:var(--accent)}
+/* チップと祝儀・ペナルティの検算を横に並べる */
+.tallyrow{display:flex;gap:8px}
+.tallyrow .tally{flex:1;min-width:0;flex-direction:column;align-items:flex-start;
+  gap:1px;margin-top:0;padding:9px 11px}
+.tallyrow .tally .k{font-size:10.5px;opacity:.85;letter-spacing:.04em}
+.tallyrow .tally b{font-size:14px}
+.tally b{font-variant-numeric:tabular-nums;font-size:15px}
+
+.chip{appearance:none;border:1px solid var(--line);background:var(--surface);border-radius:20px;
+  padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit;color:var(--ink-2)}
+.chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+.chiprow{display:flex;gap:7px;flex-wrap:wrap}
+.guesttag{font-size:9.5px;margin-left:5px;opacity:.75;border:1px solid currentColor;
+  border-radius:3px;padding:0 3px;vertical-align:1px}
+
+.toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--ink);
+  color:var(--bg);padding:9px 18px;border-radius:20px;font-size:13.5px;z-index:60;
+  box-shadow:var(--shadow);animation:fade .2s;max-width:calc(100% - 32px)}
+.toast.undo{display:flex;align-items:center;gap:14px;padding:8px 8px 8px 18px}
+.toast.undo button{appearance:none;border:0;background:var(--bg);color:var(--ink);
+  border-radius:14px;padding:5px 13px;font-size:13px;font-weight:600;cursor:pointer;
+  font-family:inherit;white-space:nowrap}
+</style>
+
+<div id="app"></div>
+
+<script>
+"use strict";
+const KEY = "mahjong-score-v1";
+const WINDS = ["東","南","西","北"];
+
+const UMA_PRESETS = {
+  4: [
+    {label:"ゴットー 5-10", uma:[10,5,-5,-10]},
+    {label:"ワンツー 10-20", uma:[20,10,-10,-20]},
+    {label:"ワンスリー 10-30", uma:[30,10,-10,-30]},
+    {label:"ウマなし", uma:[0,0,0,0]}
+  ],
+  3: [
+    {label:"5-10", uma:[10,0,-10]},
+    {label:"10-20", uma:[20,0,-20]},
+    {label:"ウマなし", uma:[0,0,0]}
+  ]
+};
+
+/* ========== storage ========== */
+function newDB(){ return {communities:[], sessions:[]}; }
+let DB = newDB();
+
+/* 保存は localStorage と sessionStorage の両方に書く。
+   ブラウザによっては localStorage への書き込みが成功しても、タブを閉じると消される
+   （iPhone Safari が別サイトの枠内で動くページに対してこの扱いをする）。
+   その場合でも sessionStorage には残るので、消えたことを検知して警告できる。 */
+function readStore(store){
+  try { const raw = store.getItem(KEY); return raw ? JSON.parse(raw) : null; }
+  catch(e){ return null; }
+}
+function writeStore(store, text){
+  try { store.setItem(KEY, text); return true; } catch(e){ return false; }
+}
+
+let STORAGE_OK = true;    // そもそも書き込めるか
+let STORAGE_LOST = false; // 書き込めたのに、次に開いたとき消えていたか
+let SAVED_AT = null;
+
+try {
+  localStorage.setItem(KEY + "__probe", "1");
+  localStorage.removeItem(KEY + "__probe");
+} catch(e){ STORAGE_OK = false; }
+
+{
+  const local = readStore(localStorage);
+  const session = readStore(sessionStorage);
+  const pick = local || session;
+  if (pick && Array.isArray(pick.communities)){
+    DB = Object.assign(newDB(), pick);
+    SAVED_AT = pick.savedAt || null;
+  }
+  // セッションには残っているのに localStorage から消えている＝保存が効いていない
+  if (!local && session) STORAGE_LOST = true;
+  try {
+    if (localStorage.getItem(KEY + "__everSaved") && !local) STORAGE_LOST = true;
+  } catch(e){}
+}
+
+function save(){
+  const text = JSON.stringify(Object.assign({}, DB, {savedAt: new Date().toISOString()}));
+  SAVED_AT = new Date().toISOString();
+  writeStore(sessionStorage, text);
+  const ok = writeStore(localStorage, text);
+  if (!ok && STORAGE_OK){ STORAGE_OK = false; toast("保存できませんでした。空き容量を確認してください"); }
+  try { localStorage.setItem(KEY + "__everSaved", "1"); } catch(e){}
+}
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+
+/* ========== score calculation ========== */
+// 五捨六入: 0.5 は切り捨て、0.6 以上を切り上げ
+function round56(x){
+  const s = x < 0 ? -1 : 1;
+  return s * Math.ceil(Math.abs(x) - 0.5 - 1e-9);
+}
+
+// points: 席順(起家から)の最終持ち点。同点は上家(起家に近い方)が上位。
+function calcGame(points, rules){
+  const n = points.length;
+  const order = points.map((p,i)=>({p,i}))
+                      .sort((a,b)=> b.p - a.p || a.i - b.i);
+  const ranks = new Array(n);
+  order.forEach((o,r)=>{ ranks[o.i] = r; });
+
+  const oka = (rules.returnPoints - rules.startPoints) * n / 1000;
+  const scores = new Array(n);
+  let sum = 0;
+  for (let i=0;i<n;i++){
+    let s = round56((points[i] - rules.returnPoints) / 1000);
+    s += (rules.uma[ranks[i]] ?? 0);
+    if (ranks[i] === 0) s += oka;
+    scores[i] = s;
+    sum += s;
+  }
+  scores[order[0].i] -= sum; // 端数はトップが吸収して合計を必ず 0 にする
+  return {ranks, scores};
+}
+
+function defaultRules(playerCount){
+  const n = playerCount || 4;
+  return {
+    playerCount:n,
+    startPoints: n===3 ? 35000 : 25000,
+    returnPoints: n===3 ? 40000 : 30000,
+    uma: UMA_PRESETS[n][1].uma.slice(),
+    rate: 100,
+    chipPoints: 2,
+    chipStart: 20
+  };
+}
+
+/* ========== derived data ========== */
+const community = id => DB.communities.find(c=>c.id===id);
+const chipStart  = c => c.rules.chipStart ?? 20;   // 1人が最初に持つチップ枚数
+const chipPoints = c => c.rules.chipPoints ?? 2;   // チップ1枚が何ポイントか
+
+/* チップは終了時の枚数で入力する。持ち枚数（既定20枚）との差が増減になる。
+   s.chips に増減が直接入っている古い記録もそのまま読めるようにしてある。 */
+function chipDelta(s, c, mid){
+  const v = (s.chipCounts||{})[mid];
+  if (v !== undefined && v !== null && v !== "") return v - chipStart(c);
+  return (s.chips||{})[mid] || 0;
+}
+
+/* 祝儀は現物を動かさず記録だけ残すので、枚数ではなくポイントで直接持つ。
+   1件＝「受け取る人・払う人・1人あたりのポイント」。
+   ツモは払う人が3人、ロンは1人。それだけの違いなので入力欄は分けない。 */
+/* 符号は数字を打つ前に＋/−を選べるよう、値とは別に覚えておく。 */
+const penSign = {}, carrySign = {};
+function penSignOf(s, mid){
+  const k = s.id + ":" + mid;
+  if (penSign[k] !== undefined) return penSign[k];
+  return ((s.penalties||{})[mid] || 0) < 0 ? -1 : 1;
+}
+
+/* 引き継ぎ：このアプリを使う前の成績。通算のポイントと収支にだけ効く。 */
+const carryOf = (c, mid) => (c.carry||{})[mid] || 0;
+function carrySignOf(c, mid){
+  const k = c.id + ":" + mid;
+  if (carrySign[k] !== undefined) return carrySign[k];
+  return carryOf(c, mid) < 0 ? -1 : 1;
+}
+
+function tipDelta(s, mid){
+  return (s.tips||[]).reduce((a,t)=>{
+    if (t.toId === mid) return a + t.per * t.fromIds.length;
+    if (t.fromIds.includes(mid)) return a - t.per;
+    return a;
+  }, 0);
+}
+const sessionsOf = cid => DB.sessions.filter(s=>s.communityId===cid)
+  .sort((a,b)=> a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+const memberName = (c,id) => (c.members.find(m=>m.id===id)||{name:"(削除済)"}).name;
+/* ゲストはその日だけの参加者。コミュニティの通算には入れない。 */
+const isGuest = (c,id) => !!((c.members.find(m=>m.id===id)||{}).guestOf);
+const regulars = c => c.members.filter(m=>!m.guestOf);
+
+// コミュニティ全体の成績。返り値: memberId -> stats
+function statsOf(cid){
+  const c = community(cid);
+  const out = {};
+  // 初期値は必ずここだけで作る（項目を足したときの入れ忘れを防ぐため）
+  const blank = (id, name) => ({id, name, games:0, ranks:[0,0,0,0], scoreSum:0,
+                 chips:0, tips:0, penalty:0});
+  regulars(c).forEach(m=>{ out[m.id] = blank(m.id, m.name); });   // ゲストは通算に入れない
+  const ensure = id => out[id] || (out[id] = blank(id, memberName(c,id)));
+
+  sessionsOf(cid).forEach(s=>{
+    s.games.forEach(g=>{
+      const {ranks, scores} = calcGame(g.points, c.rules);
+      g.seats.forEach((mid,i)=>{
+        if (isGuest(c, mid)) return;
+        const st = ensure(mid);
+        st.games++;
+        st.ranks[ranks[i]]++;
+        st.scoreSum += scores[i];
+      });
+    });
+    s.participantIds.forEach(mid=>{
+      if (isGuest(c, mid)) return;
+      const d = chipDelta(s, c, mid);
+      if (d) ensure(mid).chips += d;
+      const tp = tipDelta(s, mid);
+      if (tp) ensure(mid).tips += tp;
+    });
+    Object.entries(s.penalties||{}).forEach(([mid,v])=>{
+      if (v && !isGuest(c, mid)) ensure(mid).penalty += v;
+    });
+  });
+
+  Object.values(out).forEach(st=>{
+    // 引き継ぎは成績には混ぜず、収支だけに効かせる
+    st.carry = carryOf(c, st.id);
+    st.carryMoney = st.carry * c.rules.rate;
+    const g = st.games;
+    st.avgRank = g ? st.ranks.reduce((a,n,i)=>a+n*(i+1),0)/g : 0;
+    st.rate = st.ranks.map(n=> g ? n/g : 0);
+    st.rentai = g ? (st.ranks[0]+st.ranks[1])/g : 0;
+    // チップも祝儀・ペナルティもポイントに直してから合算し、最後にレートで円にする
+    st.extraPoints = st.chips*chipPoints(c) + st.tips + st.penalty;
+    st.money = (st.scoreSum + st.extraPoints) * c.rules.rate + st.carryMoney;
+    st.avgScore = g ? st.scoreSum/g : 0;
+  });
+  return out;
+}
+
+/* 1人ぶんの通算成績。席順別・飛び率・同卓相手別まで出す。
+   席は seats の並び（0=起家）なので、そこから東南西北がそのまま取れる。 */
+function memberStats(cid, mid, sid){
+  const c = community(cid);
+  const n = c.rules.playerCount;
+  const out = {
+    games:0, ranks:new Array(n).fill(0), score:0, tobi:0, pointsSum:0,
+    best:null, worst:null, bestPt:0, worstPt:0, streakTop:0, streakLast:0,
+    bySeat: Array.from({length:n}, ()=>({games:0, ranks:new Array(n).fill(0), score:0})),
+    vs: {}
+  };
+  let runTop = 0, runLast = 0;
+
+  // sid を渡すとその日だけ、渡さなければコミュニティの通算
+  const target = sid ? sessionsOf(cid).filter(s=>s.id===sid) : sessionsOf(cid);
+  target.forEach(s=>{
+    s.games.forEach(g=>{
+      const i = g.seats.indexOf(mid);
+      if (i < 0) return;
+      const {ranks, scores} = calcGame(g.points, c.rules);
+      const r = ranks[i];
+
+      out.games++; out.ranks[r]++; out.score += scores[i];
+      out.pointsSum += g.points[i];
+      if (g.points[i] < 0) out.tobi++;
+      // 最高・最低は、そのときの終局時の持ち点も一緒に覚えておく
+      if (out.best  === null || scores[i] > out.best) { out.best  = scores[i]; out.bestPt  = g.points[i]; }
+      if (out.worst === null || scores[i] < out.worst){ out.worst = scores[i]; out.worstPt = g.points[i]; }
+
+      const bs = out.bySeat[i];
+      bs.games++; bs.ranks[r]++; bs.score += scores[i];
+
+      g.seats.forEach((other,j)=>{
+        if (j === i) return;
+        const v = out.vs[other] || (out.vs[other] = {games:0, rankSum:0, score:0});
+        v.games++; v.rankSum += r + 1; v.score += scores[i];
+      });
+
+      if (r === 0)   { runTop++;  out.streakTop  = Math.max(out.streakTop,  runTop);  } else runTop = 0;
+      if (r === n-1) { runLast++; out.streakLast = Math.max(out.streakLast, runLast); } else runLast = 0;
+    });
+  });
+  return out;
+}
+const avgRankOf = (ranks, games) => games ? ranks.reduce((a,v,i)=>a+v*(i+1),0)/games : 0;
+
+// 1セッション内の成績
+function sessionTotals(s){
+  const c = community(s.communityId);
+  const t = {};
+  const ensure = id => t[id] ||
+    (t[id] = {score:0, games:0, ranks:[0,0,0,0], best:null, worst:null});
+  s.games.forEach(g=>{
+    const {ranks, scores} = calcGame(g.points, c.rules);
+    g.seats.forEach((mid,i)=>{
+      const e = ensure(mid);
+      e.score += scores[i]; e.games++; e.ranks[ranks[i]]++;
+      e.best  = e.best  === null ? scores[i] : Math.max(e.best,  scores[i]);
+      e.worst = e.worst === null ? scores[i] : Math.min(e.worst, scores[i]);
+    });
+  });
+  s.participantIds.forEach(ensure);
+  Object.entries(t).forEach(([mid,e])=>{
+    e.chips = chipDelta(s, c, mid);
+    e.tips = tipDelta(s, mid);
+    e.penalty = (s.penalties||{})[mid] || 0;
+    e.extraPoints = e.chips*chipPoints(c) + e.tips + e.penalty;  // チップ＋祝儀＋ペナルティ
+    e.money = (e.score + e.extraPoints) * c.rules.rate;
+  });
+  return t;
+}
+
+/* ========== helpers ========== */
+const esc = s => String(s).replace(/[&<>"']/g, m =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
+const yen = n => (n<0?"−":"") + "¥" + Math.abs(Math.round(n)).toLocaleString("ja-JP");
+const signed = n => (n>0?"+":n<0?"−":"") + Math.abs(n);
+const pct = n => Math.round(n*100) + "%";
+const cls = n => n>0 ? "plus" : n<0 ? "minus" : "";
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+};
+const fmtDate = iso => {
+  const [y,m,d] = iso.split("-");
+  const w = "日月火水木金土"[new Date(iso+"T00:00:00").getDay()];
+  return `${Number(m)}月${Number(d)}日(${w})`;
+};
+
+function toast(msg){
+  document.querySelectorAll(".toast").forEach(t=>t.remove());
+  const el = document.createElement("div");
+  el.className = "toast"; el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 2200);
+}
+
+/* 消したものを戻せるようにする。削除の直前の状態をまるごと控えておき、
+   しばらくのあいだ「取り消す」を出す。 */
+let undoData = null;
+function deleteWithUndo(msg, view, fn){
+  const before = JSON.stringify(DB), beforeView = JSON.parse(JSON.stringify(V));
+  fn();
+  save();
+  undoData = {db:before, view:beforeView};
+  go(view);
+  document.querySelectorAll(".toast").forEach(t=>t.remove());
+  const el = document.createElement("div");
+  el.className = "toast undo";
+  el.innerHTML = `<span>${esc(msg)}</span><button data-undo>取り消す</button>`;
+  document.body.appendChild(el);
+  const mine = undoData;
+  setTimeout(()=>{ el.remove(); if (undoData === mine) undoData = null; }, 9000);
+}
+
+// 着順の割合を円グラフにする。12時から時計回りに1着→4着の順。
+function pieSvg(rates, size){
+  const r = size/2 - 0.5, cx = size/2, cy = size/2;
+  const open = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"
+    class="pie" role="img" aria-label="着順の割合">`;
+  const parts = rates.map((v,i)=>({v,i})).filter(o=>o.v>0);
+  if (!parts.length)
+    return `${open}<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--surface-2)"/></svg>`;
+  if (parts.length === 1)
+    return `${open}<circle cx="${cx}" cy="${cy}" r="${r}" fill="var(--r${parts[0].i+1})"/></svg>`;
+  let a = -Math.PI/2;
+  const slices = parts.map(o=>{
+    const a1 = a + o.v*Math.PI*2;
+    const x0 = (cx + r*Math.cos(a)).toFixed(2),  y0 = (cy + r*Math.sin(a)).toFixed(2);
+    const x1 = (cx + r*Math.cos(a1)).toFixed(2), y1 = (cy + r*Math.sin(a1)).toFixed(2);
+    const big = o.v > 0.5 ? 1 : 0;
+    a = a1;
+    return `<path d="M${cx},${cy} L${x0},${y0} A${r},${r} 0 ${big} 1 ${x1},${y1} Z"
+      fill="var(--r${o.i+1})" stroke="var(--surface)" stroke-width="1.5"/>`;
+  }).join("");
+  return `${open}${slices}</svg>`;
+}
+
+/* ========== routing ========== */
+let V = {name:"home"};
+let sheet = null;
+const go = v => { V = v; sheet = null; render(); window.scrollTo(0,0); };
+
+/* ========== views ========== */
+function render(){
+  const app = document.getElementById("app");
+  let html = "";
+  if (V.name === "home") html = viewHome();
+  else if (V.name === "community") html = viewCommunity();
+  else if (V.name === "session") html = viewSession();
+  else if (V.name === "member") html = viewMember();
+  app.innerHTML = html;
+  if (sheet) renderSheet();
+  else document.querySelectorAll(".scrim,.sheet").forEach(e=>e.remove());
+}
+
+/* ---- home ---- */
+function viewHome(){
+  const cards = DB.communities.map(c=>{
+    const st = statsOf(c.id);
+    const me = c.members.find(m=>m.isMe);
+    const total = Object.values(st).reduce((a,s)=>a+s.games,0) / (c.rules.playerCount||4);
+    const mine = me ? st[me.id] : null;
+    return `<button class="card lrow" style="padding:0;display:block" data-go-community="${c.id}">
+      <div class="card-p">
+        <div class="between" style="align-items:flex-start">
+          <div class="grow">
+            <div style="font-family:var(--serif);font-size:17px;font-weight:600;letter-spacing:.02em">${esc(c.name)}</div>
+            <div class="muted num">${Math.round(total)}半荘 · ${c.members.length}人 · ${c.rules.playerCount}人打ち</div>
+          </div>
+          <span class="chev">›</span>
+        </div>
+        ${mine && mine.games ? `
+        <div class="row" style="margin-top:12px;gap:14px">
+          ${pieSvg(mine.rate.slice(0,c.rules.playerCount), 52)}
+          <div class="row" style="gap:14px;flex:1;min-width:0">
+            <div><div class="muted" style="font-size:10.5px;letter-spacing:.06em">平均着順</div>
+              <div class="num" style="font-size:17px;font-weight:600">${mine.avgRank.toFixed(2)}</div></div>
+            <div><div class="muted" style="font-size:10.5px;letter-spacing:.06em">トップ率</div>
+              <div class="num" style="font-size:17px;font-weight:600">${pct(mine.rate[0])}</div></div>
+            <div><div class="muted" style="font-size:10.5px;letter-spacing:.06em">ラス率</div>
+              <div class="num" style="font-size:17px;font-weight:600">${pct(mine.rate[c.rules.playerCount-1])}</div></div>
+            <div style="margin-left:auto;text-align:right">
+              <div class="muted" style="font-size:10.5px;letter-spacing:.06em">収支</div>
+              <div class="money ${cls(mine.money)}" style="font-size:17px">${yen(mine.money)}</div></div>
+          </div>
+        </div>` : ""}
+      </div>
+    </button>`;
+  }).join("");
+
+  return `<header><div class="hd center">
+      <h1 style="text-align:center">麻雀成績記録</h1>
+    </div></header>
+    <main class="stack">
+      ${(!STORAGE_OK || STORAGE_LOST) ? `<div class="card card-p" style="border-color:var(--accent);background:var(--accent-soft)">
+        <strong style="color:var(--accent)">このブラウザでは記録が残りません</strong>
+        <div style="font-size:13px;margin-top:4px">打っている間は使えますが、タブを閉じると消えます。
+          その日のうちに「書き出し」で控えを取ってください。</div></div>`
+      : SAVED_AT ? `<p class="muted" style="text-align:center;font-size:11.5px;margin:0">
+          最終保存 ${new Date(SAVED_AT).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}</p>` : ""}
+      ${DB.communities.length ? cards : `<div class="empty">
+        まだコミュニティがありません。<br>いつも打つ面子ごとに1つ作ってください。</div>`}
+      <button class="btn wide" data-new-community>＋ コミュニティを作る</button>
+
+      <div class="row" style="justify-content:center;gap:16px;margin-top:20px">
+        <button class="btn ghost sm" data-export>データを書き出す</button>
+        <button class="btn ghost sm" data-import>読み込む</button>
+      </div>
+      ${DB.communities.some(c=>c.members.some(m=>m.isMe)) ? "" : DB.communities.length ?
+        `<p class="muted" style="text-align:center">メンバーの1人を「自分」に設定すると、ここに自分の成績が出ます</p>` : ""}
+    </main>`;
+}
+
+/* ---- community ---- */
+function viewCommunity(){
+  const c = community(V.id);
+  if (!c) { V = {name:"home"}; return viewHome(); }
+  const tab = V.tab || "stats";
+  return `<header><div class="hd">
+      <button class="back" data-go-home>‹ 一覧</button>
+      <h1 style="text-align:right">${esc(c.name)}</h1>
+    </div></header>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="${tab==="stats"}" data-tab="stats">成績</button>
+      <button class="tab" role="tab" aria-selected="${tab==="log"}" data-tab="log">記録</button>
+      <button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>
+    </div>
+    ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
+}
+
+function tabStats(c){
+  const st = statsOf(c.id);
+  const rows = Object.values(st).filter(s=>s.games>0 || s.carry)
+    .sort((a,b)=> b.money - a.money);   // 収支の高い順
+  if (!rows.length) return `<main><div class="empty">
+    まだ記録がありません。<br>「記録」タブから今日の卓を始めてください。</div></main>`;
+
+  const n = c.rules.playerCount;
+  const cards = rows.map(s=>`
+    <button class="card card-p" style="display:block;width:100%;text-align:left;
+        font-family:inherit;color:inherit;cursor:pointer" data-go-member="${c.id}:${s.id}">
+      <div class="between">
+        <div style="font-family:var(--serif);font-size:16px;font-weight:600">${esc(s.name)}
+          <span class="chev" style="font-size:14px">›</span></div>
+        <div style="text-align:right">
+          <div class="money ${cls(s.money)}" style="font-size:16px">${yen(s.money)}</div>
+          ${s.carryMoney ? `<div class="muted num" style="font-size:10.5px;line-height:1.4">
+            引き継ぎ ${yen(s.carryMoney)}</div>` : ""}
+        </div>
+      </div>
+      <div class="muted num">${s.games}半荘 · 平均着順 ${s.avgRank.toFixed(2)} · 連対率 ${pct(s.rentai)}</div>
+      <div class="pierow">
+        ${pieSvg(s.rate.slice(0,n), 104)}
+        <div class="pielegend">
+          ${s.rate.slice(0,n).map((r,i)=>`<div class="pli">
+            <i class="rk${i+1}"></i><span>${i+1}着</span>
+            <b style="color:var(--r${i+1})">${pct(r)}</b><em>${s.ranks[i]}回</em></div>`).join("")}
+        </div>
+      </div>
+      <div class="muted num" style="margin-top:10px;font-size:11.5px">成績 ${signed(s.scoreSum)}${
+        s.chips ? ` · チップ ${signed(s.chips)}枚` : ""}${
+        s.tips ? ` · 祝儀 ${signed(s.tips)}` : ""}${
+        s.penalty ? ` · 祝儀・ペナルティ ${signed(s.penalty)}` : ""}</div>
+    </button>`).join("");
+
+  return `<main class="stack">
+    <div class="card"><div class="card-p" style="padding-bottom:10px">
+      <p class="eyebrow">収支の推移（日ごとの累積）</p>${chart(c, st)}
+    </div></div>
+    ${cards}
+  </main>`;
+}
+
+// 目盛りに使うキリのいい間隔を選ぶ
+function niceStep(range, target){
+  const raw = Math.max(range,1) / target;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const n = raw / mag;
+  return (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+}
+// 年をまたいだときだけ「2027/」を付ける
+const fmtAxisDate = (iso, withYear) => {
+  const [y,m,d] = iso.split("-");
+  return (withYear ? y + "/" : "") + Number(m) + "/" + Number(d);
+};
+
+/* 折れ線グラフの共通部分。series は順位の高い順に並べて渡す。
+   線の色は1位から 金・銀・銅・紺 の順。 */
+function lineChart(series, minPad, left, mid, right){
+  const len = Math.max(...series.map(s=>s.pts.length));
+  const all = series.flatMap(s=>s.pts);
+  const lo = Math.min(...all, 0), hi = Math.max(...all, 0);
+  const pad = Math.max(minPad, (hi-lo)*0.12);
+  const y0 = lo-pad, y1 = hi+pad;
+  const W=360, H=150, L=46, R=6, T=10, B=10;
+  const px = i => L + (len<=1 ? 0 : i/(len-1))*(W-L-R);
+  const py = v => T + (1-(v-y0)/(y1-y0))*(H-T-B);
+
+  const step = niceStep(y1-y0, 4);
+  const ticks = [];
+  for (let v = Math.ceil(y0/step)*step; v <= y1; v += step) ticks.push(Math.round(v));
+  const axis = ticks.map(v=>{
+    const y = py(v).toFixed(1), isZero = v === 0;
+    return `<line x1="${L}" y1="${y}" x2="${W-R}" y2="${y}"
+        stroke="var(--line${isZero?"":"-soft"})" stroke-width="1"
+        ${isZero ? 'stroke-dasharray="3 3"' : ""}/>
+      <text x="${L-6}" y="${y}" text-anchor="end" dominant-baseline="middle"
+        font-size="10" fill="var(--ink-3)">${v.toLocaleString("ja-JP")}</text>`;
+  }).join("");
+
+  const colorOf = k => `var(--r${Math.min(k+1, 6)})`;
+  const lines = series.map((s,k)=>{
+    const col = colorOf(k);
+    const d = s.pts.map((v,i)=>`${i?"L":"M"}${px(i).toFixed(1)},${py(v).toFixed(1)}`).join("");
+    const dots = s.pts.map((v,i)=>
+      `<circle cx="${px(i).toFixed(1)}" cy="${py(v).toFixed(1)}"
+        r="${i===s.pts.length-1?2.8:1.8}" fill="${col}"/>`).join("");
+    return `<path d="${d}" fill="none" stroke="${col}" stroke-width="1.8"
+       stroke-linejoin="round" stroke-linecap="round"/>${dots}`;
+  }).join("");
+
+  return {
+    colorOf,
+    html: `<div class="scroller"><svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}"
+        role="img" aria-label="累積の推移">${axis}${lines}</svg></div>
+      <div class="between muted" style="font-size:10.5px;margin-top:2px;padding-left:44px">
+        <span>${left}</span><span>${mid}</span><span>${right}</span>
+      </div>`
+  };
+}
+
+/* その日の成績（ポイント）を半荘ごとに足し上げた折れ線。
+   序盤は良かったのに終盤で崩れた、といった流れが読める。 */
+function dayChart(s, c){
+  if (!s.games.length) return "";
+  const t = sessionTotals(s);
+  const ids = s.participantIds.filter(id => t[id] && t[id].games > 0);
+  if (!ids.length) return "";
+
+  const run = {};
+  const series = ids.map(id=>{ run[id] = 0; return {id, name:memberName(c,id), pts:[0]}; });
+  s.games.forEach(g=>{
+    const {scores} = calcGame(g.points, c.rules);
+    series.forEach(se=>{
+      const i = g.seats.indexOf(se.id);
+      if (i >= 0) run[se.id] += scores[i];
+      se.pts.push(run[se.id]);
+    });
+  });
+  series.sort((a,b)=> b.pts[b.pts.length-1] - a.pts[a.pts.length-1]);
+
+  const g = lineChart(series, 5, "開始", `全${s.games.length}半荘`, "終了");
+  const legend = series.map((se,k)=>{
+    const v = se.pts[se.pts.length-1];
+    return `<span><i style="background:${g.colorOf(k)}"></i>${esc(se.name)}
+      <b class="num ${cls(v)}" style="font-weight:600">${signed(v)}</b></span>`;
+  }).join("");
+
+  return `<div class="card"><div class="card-p" style="padding-bottom:10px">
+      <p class="eyebrow">今日の成績（半荘ごとの累積）</p>
+      ${g.html}<div class="legend">${legend}</div>
+    </div></div>`;
+}
+
+/* 日ごとの収支を足し上げた累積の折れ線（円）。
+   その日打っていない人の線は横ばいになる。 */
+function chart(c, st){
+  const sessions = sessionsOf(c.id);
+  const members = Object.values(st).filter(s=>s.games>0);
+  if (!members.length || !sessions.length)
+    return `<p class="muted" style="margin:0">記録がたまるとグラフが出ます</p>`;
+
+  // 引き継ぎがある人は、そのぶんを起点にする
+  const run = {};
+  const series = members.map(m=>{
+    run[m.id] = carryOf(c, m.id) * c.rules.rate;
+    return {id:m.id, name:m.name, pts:[run[m.id]]};
+  });
+  sessions.forEach(s=>{
+    const t = sessionTotals(s);
+    series.forEach(se=>{
+      run[se.id] += t[se.id] ? t[se.id].money : 0;
+      se.pts.push(run[se.id]);
+    });
+  });
+
+  // 今の順位が高い順に並べ、1位から 金・銀・銅・紺 の順で色を振る
+  series.sort((a,b)=> b.pts[b.pts.length-1] - a.pts[a.pts.length-1]);
+
+  const first = sessions[0], lastS = sessions[sessions.length-1];
+  const crossYear = first.date.slice(0,4) !== lastS.date.slice(0,4);
+  const g = lineChart(series, 100,
+    fmtAxisDate(first.date, false), `${sessions.length}日`, fmtAxisDate(lastS.date, crossYear));
+
+  // 凡例には最新（今の累計）を円で添える
+  const legend = series.map((s,k)=>{
+    const v = s.pts[s.pts.length-1];
+    return `<span><i style="background:${g.colorOf(k)}"></i>${esc(s.name)}
+      <b class="num ${cls(v)}" style="font-weight:600">${yen(v)}</b></span>`;
+  }).join("");
+
+  return g.html + `<div class="legend">${legend}</div>`;
+}
+
+function tabLog(c){
+  const ss = sessionsOf(c.id).slice().reverse();
+  const rows = ss.map(s=>{
+    const t = sessionTotals(s);
+    const list = Object.entries(t).filter(([,e])=>e.games)
+      .sort((a,b)=> b[1].score - a[1].score);   // ポイントの高い順に左から
+    return `<button class="lrow" data-go-session="${s.id}">
+      <div class="grow">
+        <div class="row" style="gap:8px">
+          <span style="font-weight:600">${fmtDate(s.date)}</span>
+          <span class="muted num" style="font-size:12px">${s.games.length}半荘 ${s.participantIds.length}人</span>
+        </div>
+        ${list.length ? `<div class="sesscores">${list.map(([mid,e])=>
+          `<span class="ss"><span class="ssname">${esc(memberName(c,mid))}</span
+            ><b class="num ${cls(e.score)}">${signed(e.score)}</b></span>`).join("")}</div>` : ""}
+      </div><span class="chev">›</span></button>`;
+  }).join("");
+
+  return `<main class="stack">
+      ${ss.length ? `<div class="card">${rows}</div>`
+        : `<div class="empty">まだ記録がありません。</div>`}
+    </main>
+    <button class="btn primary fab" data-new-session>＋ 今日の卓を始める</button>`;
+}
+
+function tabSettings(c){
+  const r = c.rules;
+  const presets = UMA_PRESETS[r.playerCount] || UMA_PRESETS[4];
+  return `<main class="stack">
+    <div class="card card-p stack">
+      <h2 class="sec">メンバー</h2>
+      <div class="stack" style="gap:8px">
+        ${regulars(c).map(m=>`<div class="row">
+          <input value="${esc(m.name)}" data-member-name="${m.id}" style="flex:1">
+          <button class="chip" aria-pressed="${!!m.isMe}" data-set-me="${m.id}">自分</button>
+          <button class="btn ghost sm danger" data-del-member="${m.id}">削除</button>
+        </div>`).join("")}
+      </div>
+      <button class="btn sm" data-add-member>＋ メンバーを追加</button>
+      <p class="muted">記録に使われているメンバーは削除できません。</p>
+    </div>
+
+    <div class="card card-p stack">
+      <h2 class="sec">ルール</h2>
+      <label class="fld">人数
+        <select data-rule="playerCount">
+          <option value="4" ${r.playerCount===4?"selected":""}>4人麻雀</option>
+          <option value="3" ${r.playerCount===3?"selected":""}>3人麻雀</option>
+        </select></label>
+      <div class="grid2">
+        <label class="fld">配給原点
+          <input inputmode="numeric" value="${r.startPoints}" data-rule="startPoints"></label>
+        <label class="fld">返し点
+          <input inputmode="numeric" value="${r.returnPoints}" data-rule="returnPoints"></label>
+      </div>
+      <div>
+        <div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">ウマ（順位点）</div>
+        <div class="chiprow" style="margin-bottom:8px">
+          ${presets.map((p,i)=>`<button class="chip"
+            aria-pressed="${JSON.stringify(p.uma)===JSON.stringify(r.uma)}"
+            data-uma-preset="${i}">${p.label}</button>`).join("")}
+        </div>
+        <div class="grid${r.playerCount===3?"2":"4"}" style="${r.playerCount===3?"grid-template-columns:repeat(3,1fr)":""}">
+          ${r.uma.map((u,i)=>`<label class="fld"><span style="font-size:11px">${i+1}着</span>
+            <input inputmode="numeric" value="${u}" data-uma="${i}" style="text-align:center"></label>`).join("")}
+        </div>
+      </div>
+      <div class="grid2">
+        <label class="fld">レート（1000点＝円）
+          <input inputmode="numeric" value="${r.rate}" data-rule="rate"></label>
+        <label class="fld">チップ（1枚＝ポイント）
+          <input inputmode="numeric" value="${chipPoints(c)}" data-rule="chipPoints"></label>
+      </div>
+      <label class="fld">チップの持ち枚数（1人が最初に持つ枚数）
+        <input inputmode="numeric" value="${chipStart(c)}" data-rule="chipStart"></label>
+      <p class="muted">ルールを変えると過去の記録も新しいルールで再計算されます。</p>
+    </div>
+
+    <div class="card card-p stack">
+      <h2 class="sec">引き継ぎ</h2>
+      ${regulars(c).map(m=>`<div class="row">
+        <span style="flex:1;min-width:0;font-size:14px">${esc(m.name)}</span>
+        <span class="signed" style="width:132px;flex:0 0 auto">
+          <button class="signbtn" data-carry-sign="${m.id}"
+            aria-pressed="${carrySignOf(c,m.id) < 0}"
+            aria-label="${esc(m.name)}の引き継ぎの符号を切り替える"
+            >${carrySignOf(c,m.id) < 0 ? "−" : "＋"}</button>
+          <input inputmode="numeric" placeholder="0" data-carry="${m.id}"
+            class="${carrySignOf(c,m.id) < 0 ? "neg" : ""}" style="text-align:right"
+            aria-label="${esc(m.name)}の引き継ぎポイント"
+            value="${carryOf(c,m.id) ? Math.abs(carryOf(c,m.id)) : ""}">
+        </span>
+      </div>`).join("")}
+    </div>
+
+    <div class="card card-p stack">
+      <h2 class="sec">コミュニティ</h2>
+      <label class="fld">名前<input value="${esc(c.name)}" data-community-name></label>
+      <button class="btn danger" data-del-community style="border:1px solid var(--line)">このコミュニティを削除</button>
+    </div>
+  </main>`;
+}
+
+/* ---- 個人の詳細（通算） ---- */
+function viewMember(){
+  const c = community(V.cid);
+  if (!c) { V = {name:"home"}; return viewHome(); }
+  const mid = V.mid;
+  const sess = V.sid ? DB.sessions.find(x=>x.id===V.sid) : null;   // その日だけか、通算か
+  const m = memberStats(V.cid, mid, V.sid);
+  const n = c.rules.playerCount;
+  const st = (sess ? sessionTotals(sess)[mid] : statsOf(V.cid)[mid]) || {money:0, extraPoints:0};
+  const scopeLabel = sess ? fmtDate(sess.date) : "通算";
+  const totalScore = sess ? (st.score || 0) : (st.scoreSum || 0);  // 通算には引き継ぎが入る
+  const rate = m.games ? m.ranks.map(r=>r/m.games) : new Array(n).fill(0);
+  const avg = avgRankOf(m.ranks, m.games);
+
+  const back = `<button class="back" data-go-back>‹ 戻る</button>`;
+  if (!m.games) return `<header><div class="hd">${back}
+      <span class="datepick" style="pointer-events:none">${esc(memberName(c,mid))}</span></div></header>
+    <main class="stack"><div class="empty">${sess ? "この日は打っていません。" : "まだ半荘の記録がありません。"}</div>
+      ${sess ? `<button class="btn wide" data-go-member-total="${c.id}:${mid}">
+        ${esc(c.name)} 通算のデータを見る</button>` : ""}</main>`;
+
+  // 席順別
+  const seatRows = m.bySeat.map((b,i)=>`<tr>
+    <td><span style="font-family:var(--serif);font-size:15px">${WINDS[i]}</span></td>
+    <td class="num">${b.games}</td>
+    <td class="num">${b.games ? avgRankOf(b.ranks,b.games).toFixed(2) : "—"}</td>
+    <td class="num">${b.games ? pct(b.ranks[0]/b.games) : "—"}</td>
+    <td class="num">${b.games ? pct(b.ranks[n-1]/b.games) : "—"}</td>
+    <td class="num">${b.games ? pct((b.ranks[0]+b.ranks[1])/b.games) : "—"}</td>
+    <td class="num ${cls(b.score)}">${b.games ? signed(Math.round(b.score/b.games*10)/10) : "—"}</td>
+  </tr>`).join("");
+
+  // 同卓相手別（自分の平均着順が良い順）
+  const vs = Object.entries(m.vs).map(([id,v])=>({id, ...v}))
+    .filter(v=>v.games>0)
+    .sort((a,b)=> a.rankSum/a.games - b.rankSum/b.games);
+  const vsRows = vs.map(v=>`<tr>
+    <td>${esc(memberName(c,v.id))}</td>
+    <td class="num">${v.games}</td>
+    <td class="num">${(v.rankSum/v.games).toFixed(2)}</td>
+    <td class="num ${cls(v.score)}">${signed(Math.round(v.score/v.games*10)/10)}</td>
+  </tr>`).join("");
+
+  return `<header><div class="hd">${back}
+      <span class="datepick" style="pointer-events:none">${esc(memberName(c,mid))}</span>
+    </div></header>
+    <main class="stack">
+      <div class="card">
+        <div class="card-p" style="padding-bottom:8px">
+          <p class="eyebrow" style="margin:0">${scopeLabel} ${m.games}半荘</p></div>
+        <div class="statgrid">
+          <div class="stat"><div class="k">成績</div>
+            <div class="v ${cls(totalScore)}">${signed(totalScore)}</div></div>
+          <div class="stat"><div class="k">チップ</div>
+            <div class="v ${cls(st.extraPoints||0)}">${signed(st.extraPoints||0)}</div></div>
+          <div class="stat"><div class="k">収支</div>
+            <div class="v ${cls(st.money)}" style="font-size:16px">${yen(st.money)}</div>
+            ${!sess && st.carryMoney ? `<div class="sub2">引き継ぎ ${yen(st.carryMoney)}</div>` : ""}</div>
+        </div>
+        <div class="statgrid" style="border-top:1px solid var(--line-soft)">
+          <div class="stat"><div class="k">平均着順</div><div class="v">${avg.toFixed(2)}</div></div>
+          <div class="stat"><div class="k">連対率</div>
+            <div class="v">${pct((m.ranks[0]+m.ranks[1])/m.games)}</div></div>
+          <div class="stat"><div class="k">平均持ち点</div>
+            <div class="v" style="font-size:16px">${Math.round(m.pointsSum/m.games).toLocaleString("ja-JP")}</div></div>
+        </div>
+        <div class="statgrid" style="border-top:1px solid var(--line-soft)">
+          <div class="stat"><div class="k">トップ率</div>
+            <div class="v" style="color:var(--r1)">${pct(rate[0])}</div></div>
+          <div class="stat"><div class="k">ラス回避率</div>
+            <div class="v">${pct(1 - rate[n-1])}</div></div>
+          <div class="stat"><div class="k">飛び率</div>
+            <div class="v">${pct(m.tobi/m.games)}</div></div>
+        </div>
+        <div class="card-p">
+          <div class="pierow" style="margin-top:0">
+            ${pieSvg(rate, 92)}
+            <div class="pielegend">
+              ${rate.map((r,i)=>`<div class="pli">
+                <i class="rk${i+1}"></i><span>${i+1}着</span>
+                <b style="color:var(--r${i+1})">${pct(r)}</b><em>${m.ranks[i]}回</em></div>`).join("")}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-p" style="padding-bottom:4px"><p class="eyebrow">席順別の成績</p></div>
+        <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
+          <thead><tr><th>席</th><th>半荘</th><th>平均着順</th><th>トップ</th><th>ラス</th><th>連対</th><th>平均</th></tr></thead>
+          <tbody>${seatRows}</tbody></table></div>
+      </div>
+
+      <div class="card">
+        <div class="card-p" style="padding-bottom:8px"><p class="eyebrow">自己ベスト</p></div>
+        <div class="statgrid" style="grid-template-columns:repeat(4,1fr)">
+          <div class="stat"><div class="k">最高スコア</div>
+            <div class="v plus" style="font-size:17px">${signed(m.best)}</div>
+            <div class="sub2">${m.bestPt.toLocaleString("ja-JP")}点</div></div>
+          <div class="stat"><div class="k">最低スコア</div>
+            <div class="v minus" style="font-size:17px">${signed(m.worst)}</div>
+            <div class="sub2">${m.worstPt.toLocaleString("ja-JP")}点</div></div>
+          <div class="stat"><div class="k">連続トップ</div>
+            <div class="v" style="font-size:17px">${m.streakTop}</div></div>
+          <div class="stat"><div class="k">連続ラス</div>
+            <div class="v" style="font-size:17px">${m.streakLast}</div></div>
+        </div>
+      </div>
+
+      ${vs.length ? `<div class="card">
+        <div class="card-p" style="padding-bottom:4px"><p class="eyebrow">対戦相手別の成績</p></div>
+        <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
+          <thead><tr><th>相手</th><th>同卓</th><th>平均着順</th><th>平均</th></tr></thead>
+          <tbody>${vsRows}</tbody></table></div>
+      </div>` : ""}
+
+      ${sess && !isGuest(c, mid) ? `<button class="btn wide" data-go-member-total="${c.id}:${mid}">
+          ${esc(c.name)} 通算のデータを見る</button>`
+        : sess ? `<p class="muted" style="text-align:center;font-size:11.5px">
+          この日だけのゲストなので、通算には入りません。</p>` : ""}
+    </main>`;
+}
+
+/* ---- session ---- */
+function viewSession(){
+  const s = DB.sessions.find(x=>x.id===V.id);
+  if (!s) { V={name:"home"}; return viewHome(); }
+  const c = community(s.communityId);
+  const t = sessionTotals(s);
+  const parts = s.participantIds;
+  const n = c.rules.playerCount;
+
+  const totalsRows = parts.map(mid=>{
+    const e = t[mid] || {score:0,games:0,money:0,chips:0,penalty:0,extraPoints:0};
+    return `<tr><td>${esc(memberName(c,mid))}</td>
+      <td class="num">${e.games}</td>
+      <td class="num ${cls(e.score)}">${signed(e.score)}</td>
+      <td class="num ${cls(e.extraPoints)}">${signed(e.extraPoints)}</td>
+      <td class="money ${cls(e.money)}">${yen(e.money)}</td></tr>`;
+  }).join("");
+
+  const gamesTbl = s.games.length ? `
+    <div class="card"><div class="scroller" style="padding:0 10px"><table class="gtbl games">
+      <thead><tr><th></th>${parts.map(mid=>
+        `<th>${esc(memberName(c,mid))}</th>`).join("")}</tr></thead>
+      <tbody>${s.games.map((g,gi)=>{
+        const {ranks,scores} = calcGame(g.points, c.rules);
+        const by = {};
+        g.seats.forEach((mid,i)=>{ by[mid] = {r:ranks[i]+1, s:scores[i], p:g.points[i], w:WINDS[i]}; });
+        const open = (V.openGames || []).includes(gi);
+        return `<tr class="${open?"gopen":""}">
+          <td><span class="gamecell">
+            <button class="btn ghost sm" data-toggle-game="${gi}"
+              style="padding:2px 4px;font-size:11px">半荘${gi+1} ${open?"▾":"›"}</button>
+            ${open ? `<button class="btn editlink" data-edit-game="${gi}">修正</button>` : ""}
+          </span></td>
+          ${parts.map(mid=> by[mid]
+            ? `<td><span class="row" style="justify-content:center;gap:4px">
+                 <span class="rp rp${by[mid].r}">${by[mid].r}</span>
+                 <span class="${cls(by[mid].s)}" style="min-width:26px;text-align:right">${signed(by[mid].s)}</span></span></td>`
+            : `<td class="muted">—</td>`).join("")}</tr>
+        ${open ? `<tr class="ptrow">
+          <td><span class="ptlabel">持ち点</span></td>
+          ${parts.map(mid=> by[mid]
+            ? `<td><span class="ptval ${by[mid].p<0?"minus":""}">${by[mid].p.toLocaleString("ja-JP")}</span>
+                 <span class="ptwind">${by[mid].w}</span></td>`
+            : `<td></td>`).join("")}</tr>` : ""}`;
+      }).join("")}</tbody>
+    </table></div></div>` : `<div class="empty">半荘を追加してください。</div>`;
+
+  const tab = V.stab || "score";
+
+  const scoreTab = `<main class="stack">
+      <div class="card"><div class="card-p" style="padding-bottom:6px"><p class="eyebrow">今日の収支</p></div>
+        <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
+          <thead><tr><th>名前</th><th>半荘数</th><th>成績</th><th>チップ</th><th>収支</th></tr></thead>
+          <tbody>${totalsRows}</tbody></table></div></div>
+
+      ${dayChart(s, c)}
+
+      <div><p class="eyebrow" style="padding:0 2px">半荘ごとの成績</p>${gamesTbl}</div>
+    </main>
+    <button class="btn primary fab" data-add-game
+      ${parts.length < n ? "disabled style='opacity:.5'" : ""}>＋ 半荘を追加</button>`;
+
+  const setupTab = `<main class="stack">
+      <div class="card card-p">
+        <h2 class="sec">チップ・祝儀・ペナルティ</h2>
+        ${parts.map(mid=>{
+          const cnt = (s.chipCounts||{})[mid];
+          const d = chipDelta(s, c, mid);
+          return `<div class="ppl">
+          <div class="ppl-name">${esc(memberName(c,mid))}</div>
+          <div class="ppl-fields">
+            <label class="fld2">チップ（終了時の枚数）
+              <span class="row" style="gap:6px">
+                <input inputmode="numeric" value="${cnt ?? ""}"
+                  placeholder="${chipStart(c)}" data-chip="${mid}">
+                <span class="num ${cls(d)}" style="font-size:12px;white-space:nowrap">${
+                  d ? signed(d)+"枚" : "±0"}</span></span></label>
+            <div class="fld2">祝儀・ペナルティ（ポイント）
+              <span class="signed">
+                <button class="signbtn" data-pen-sign="${mid}"
+                  aria-pressed="${penSignOf(s,mid) < 0}"
+                  aria-label="${esc(memberName(c,mid))}の祝儀・ペナルティの符号を切り替える"
+                  >${penSignOf(s,mid) < 0 ? "−" : "＋"}</button>
+                <input inputmode="numeric" placeholder="0" data-penalty="${mid}"
+                  class="${penSignOf(s,mid) < 0 ? "neg" : ""}"
+                  aria-label="${esc(memberName(c,mid))}の祝儀・ペナルティ"
+                  value="${(s.penalties||{})[mid] ? Math.abs(s.penalties[mid]) : ""}">
+              </span></div>
+          </div>
+        </div>`;}).join("")}
+        ${(()=>{
+          const total = parts.reduce((a,mid)=>{
+            const v = (s.chipCounts||{})[mid];
+            return a + (v == null || v === "" ? chipStart(c) : v);
+          }, 0);
+          const want = chipStart(c) * parts.length;
+          const chipOk = total === want;
+          const penSum = parts.reduce((a,mid)=> a + ((s.penalties||{})[mid] || 0), 0);
+          const penOk = penSum === 0;
+          return `<div class="stack" style="gap:8px;margin-top:12px">
+            <div class="tallyrow">
+              <div class="tally ${chipOk?"ok":"ng"}">
+                <span class="k">チップ合計</span>
+                <b class="num">${chipOk ? `${want}枚 ✓` : `${total>want?"+":""}${total-want}枚 ずれ`}</b></div>
+              <div class="tally ${penOk?"ok":"ng"}">
+                <span class="k">祝儀・ペナルティ合計</span>
+                <b class="num">${penOk ? "±0 ✓" : `${signed(penSum)} ずれ`}</b></div>
+            </div>
+          </div>`;
+        })()}
+      </div>
+
+      <div class="card card-p stack">
+        <h2 class="sec">参加メンバー</h2>
+        <div class="chiprow">${c.members
+          .filter(m=>!m.guestOf || m.guestOf === s.id)
+          .map(m=>`<button class="chip" aria-pressed="${parts.includes(m.id)}"
+            data-toggle-part="${m.id}">${esc(m.name)}${
+            m.guestOf ? '<span class="guesttag">ゲスト</span>' : ""}</button>`).join("")}</div>
+        <button class="btn sm" data-add-guest>＋ ゲストを追加</button>
+      </div>
+
+      <div class="card card-p">
+        <button class="btn danger wide" data-del-session
+          style="border:1px solid var(--line)">この日の記録を削除</button>
+      </div>
+    </main>`;
+
+  return `<header><div class="hd">
+      <button class="back" data-go-community="${c.id}">‹ ${esc(c.name)}</button>
+      <span class="datepick">${fmtDate(s.date)}<span class="caret">▾</span>
+        <input type="date" value="${s.date}" data-session-date aria-label="日付を選ぶ"></span>
+    </div></header>
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="${tab==="score"}" data-stab="score">成績</button>
+      <button class="tab" role="tab" aria-selected="${tab==="setup"}" data-stab="setup">チップ</button>
+      <button class="tab" role="tab" aria-selected="${tab==="data"}" data-stab="data">データ</button>
+    </div>
+    ${tab==="score" ? scoreTab : tab==="setup" ? setupTab : dataTab()}`;
+
+  /* ---- データタブ：その日ぶんだけを詳しく見る ---- */
+  function dataTab(){
+    if (!s.games.length) return `<main><div class="empty">
+      半荘を記録すると、この日の内訳が出ます。</div></main>`;
+
+    const rows = parts.map(mid=>({mid, e:t[mid]}))
+      .filter(o=>o.e)
+      .sort((a,b)=> b.e.money - a.e.money);
+
+    const cards = rows.map(({mid,e})=>{
+      const rate = e.games ? e.ranks.map(r=>r/e.games) : [0,0,0,0];
+      const avg  = e.games ? e.ranks.reduce((a,r,i)=>a+r*(i+1),0)/e.games : 0;
+      const rentai = e.games ? (e.ranks[0]+e.ranks[1])/e.games : 0;
+      return `<button class="card" style="display:block;width:100%;text-align:left;
+          font-family:inherit;color:inherit;cursor:pointer;padding:0"
+          data-go-member="${c.id}:${mid}">
+        <div class="card-p" style="padding-bottom:12px">
+          <div class="between">
+            <div style="font-family:var(--serif);font-size:16px;font-weight:600">${esc(memberName(c,mid))}
+              <span class="chev" style="font-size:14px">›</span></div>
+            <div class="money ${cls(e.money)}" style="font-size:17px">${yen(e.money)}</div>
+          </div>
+          <div class="muted num">${e.games}半荘${e.games ?
+            ` · 平均着順 ${avg.toFixed(2)} · 連対率 ${pct(rentai)}` : ""}</div>
+          ${e.games ? `<div class="pierow">
+            ${pieSvg(rate.slice(0,n), 84)}
+            <div class="pielegend">
+              ${rate.slice(0,n).map((r,i)=>`<div class="pli">
+                <i class="rk${i+1}"></i><span>${i+1}着</span>
+                <b style="color:var(--r${i+1})">${pct(r)}</b><em>${e.ranks[i]}回</em></div>`).join("")}
+            </div></div>` : ""}
+        </div>
+        <div class="statgrid" style="grid-template-columns:repeat(${e.penalty?3:2},1fr)">
+          <div class="stat"><div class="k">成績</div>
+            <div class="v ${cls(e.score)}">${signed(e.score)}</div></div>
+          <div class="stat"><div class="k">チップ</div>
+            <div class="v ${cls(e.chips)}">${signed(e.chips)}枚</div></div>
+          ${e.penalty ? `<div class="stat"><div class="k">祝儀・ペナルティ</div>
+            <div class="v ${cls(e.penalty)}">${signed(e.penalty)}</div></div>` : ""}
+        </div>
+        ${e.games ? `<div class="card-p" style="padding-top:10px">
+          <div class="muted num" style="font-size:11.5px">
+            最高 ${signed(e.best)} · 最低 ${signed(e.worst)} · 平均 ${(e.score/e.games).toFixed(1)}</div>
+        </div>` : ""}
+      </button>`;
+    }).join("");
+
+    return `<main class="stack">${cards}</main>`;
+  }
+}
+
+/* ========== sheets ==========
+   公開ページはサンドボックス内で動くため prompt / confirm が使えない。
+   入力・確認はすべてこのシートで行う。 */
+function renderSheet(){
+  document.querySelectorAll(".scrim,.sheet").forEach(e=>e.remove());
+  const scrim = document.createElement("div");
+  scrim.className = "scrim"; scrim.dataset.closeSheet = "1";
+  const el = document.createElement("div");
+  el.className = "sheet";
+  el.innerHTML =
+    sheet.kind === "text"    ? sheetText()    :
+    sheet.kind === "confirm" ? sheetConfirm() :
+    sheet.kind === "data"    ? sheetData()    : sheetGame();
+  document.body.append(scrim, el);
+  fitSheetAboveKeyboard();
+  if (sheet.kind === "game" || !sheet.kind){
+    updateTally();
+    // 開いた直後だけ先頭に合わせる。符号ボタンで作り直したときに飛ばないように
+    if (sheet.focusFirst){
+      const first = el.querySelector("input[data-pt]");
+      if (first) first.focus();
+      sheet.focusFirst = false;
+    }
+  } else {
+    const f = el.querySelector("input[data-ask],textarea[data-ask]");
+    if (f){ f.focus(); if (f.value) f.select(); }
+  }
+}
+
+/* スマホでキーボードが出ると、画面下に固定したシートがその裏に隠れて
+   決定ボタンを押せなくなる。キーボードの高さぶん持ち上げて必ず届くようにする。 */
+function fitSheetAboveKeyboard(){
+  const el = document.querySelector(".sheet");
+  const vv = window.visualViewport;
+  if (!el || !vv) return;
+  const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+  el.style.bottom = hidden + "px";
+  el.style.maxHeight = Math.round(vv.height * 0.94) + "px";
+}
+if (window.visualViewport){
+  window.visualViewport.addEventListener("resize", fitSheetAboveKeyboard);
+  window.visualViewport.addEventListener("scroll", fitSheetAboveKeyboard);
+}
+document.addEventListener("focusin", e=>{
+  if (e.target.matches("input,textarea,select")) setTimeout(fitSheetAboveKeyboard, 120);
+});
+
+function askText(title, label, value, okLabel, onOk){
+  sheet = {kind:"text", title, label, value:value||"", okLabel:okLabel||"決定", onOk};
+  render();
+}
+function askConfirm(title, message, okLabel, onOk){
+  sheet = {kind:"confirm", title, message, okLabel, onOk};
+  render();
+}
+
+function sheetText(){
+  // 決定ボタンはヘッダーにも置く。キーボードが出ていても必ず押せるようにするため。
+  return `<div class="sheet-hd"><h3>${esc(sheet.title)}</h3>
+      <button class="btn ghost sm" data-close-sheet>やめる</button>
+      <button class="btn primary sm" data-ask-ok>${esc(sheet.okLabel)}</button></div>
+    <div class="sheet-body stack">
+      <label class="fld">${esc(sheet.label)}
+        <input data-ask value="${esc(sheet.value)}" autocapitalize="off" enterkeyhint="done"></label>
+      <button class="btn wide primary" data-ask-ok>${esc(sheet.okLabel)}</button>
+    </div>`;
+}
+
+function sheetConfirm(){
+  return `<div class="sheet-hd"><h3>${esc(sheet.title)}</h3>
+      <button class="btn ghost sm" data-close-sheet>閉じる</button></div>
+    <div class="sheet-body stack">
+      <p style="margin:0;color:var(--ink-2)">${esc(sheet.message)}</p>
+      <button class="btn wide primary" style="background:var(--bad);border-color:var(--bad)"
+        data-ask-ok>${esc(sheet.okLabel)}</button>
+      <button class="btn wide ghost" data-close-sheet>やめる</button>
+    </div>`;
+}
+
+function sheetData(){
+  if (sheet.mode === "export"){
+    return `<div class="sheet-hd"><h3>データを書き出す</h3>
+        <button class="btn ghost sm" data-close-sheet>閉じる</button></div>
+      <div class="sheet-body stack">
+        <p class="muted" style="margin:0">この文字列がデータそのものです。メモやメールに貼って保管してください。</p>
+        <textarea data-ask readonly rows="8" style="font-size:11px;font-family:ui-monospace,monospace"
+          >${esc(JSON.stringify(DB))}</textarea>
+        <button class="btn wide primary" data-copy>コピーする</button>
+        <button class="btn wide" data-download>ファイルとして保存</button>
+      </div>`;
+  }
+  return `<div class="sheet-hd"><h3>データを読み込む</h3>
+      <button class="btn ghost sm" data-close-sheet>閉じる</button></div>
+    <div class="sheet-body stack">
+      <p class="muted" style="margin:0">書き出した文字列を貼り付けてください。今のデータは置き換わります。</p>
+      <textarea data-ask rows="8" placeholder='{"communities":[...'
+        style="font-size:11px;font-family:ui-monospace,monospace"></textarea>
+      <button class="btn wide primary" data-do-import>読み込む</button>
+    </div>`;
+}
+
+function sheetGame(){
+  const s = DB.sessions.find(x=>x.id===V.id);
+  const c = community(s.communityId);
+  const n = c.rules.playerCount;
+  const draft = sheet.draft;
+
+  const opts = mid => s.participantIds.map(p=>
+    `<option value="${p}" ${p===mid?"selected":""}>${esc(memberName(c,p))}</option>`).join("");
+
+  return `<div class="sheet-hd">
+      <h3>${sheet.index==null ? "半荘を追加" : `半荘${sheet.index+1}を修正`}</h3>
+      <button class="btn ghost sm" data-close-sheet>やめる</button>
+      <button class="btn primary sm" data-save-game>記録する</button>
+    </div>
+    <div class="sheet-body stack">
+      <p class="muted" style="margin:0">起家から順に、終局時の持ち点を入れてください。</p>
+      <div>
+        ${draft.seats.map((mid,i)=>`<div class="seat">
+          <span class="wind">${WINDS[i]}</span>
+          <select data-seat="${i}">${opts(mid)}</select>
+          <button class="signbtn" data-pt-sign="${i}" aria-pressed="${draft.signs[i] < 0}"
+            aria-label="${WINDS[i]}家の持ち点の符号を切り替える">${draft.signs[i] < 0 ? "−" : "＋"}</button>
+          <input inputmode="numeric" placeholder="持ち点" data-pt="${i}"
+            class="${draft.signs[i] < 0 ? "neg" : ""}"
+            value="${draft.points[i]===null ? "" : Math.abs(draft.points[i])}">
+        </div>`).join("")}
+      </div>
+      <div class="tally" id="tally"></div>
+      <button class="btn wide primary" data-save-game>この半荘を記録する</button>
+      ${sheet.index!=null ? `<button class="btn wide danger" data-del-game>この半荘を削除</button>` : ""}
+      <div id="preview"></div>
+    </div>`;
+}
+
+function readDraft(){
+  const el = document.querySelector(".sheet");
+  if (!el || !sheet || sheet.kind !== "game") return;
+  el.querySelectorAll("[data-seat]").forEach(sel=>{
+    sheet.draft.seats[+sel.dataset.seat] = sel.value;
+  });
+  el.querySelectorAll("[data-pt]").forEach(inp=>{
+    const i = +inp.dataset.pt;
+    const v = inp.value.trim();
+    if (v === ""){ sheet.draft.points[i] = null; return; }
+    const num = Number(v);
+    if (isNaN(num)){ sheet.draft.points[i] = null; return; }
+    // 「-1200」と直接打たれたら、符号ボタンの側もそれに合わせる
+    if (v.startsWith("-") || num < 0) sheet.draft.signs[i] = -1;
+    sheet.draft.points[i] = Math.abs(Math.round(num)) * sheet.draft.signs[i];
+  });
+}
+
+function updateTally(){
+  const el = document.querySelector(".sheet");
+  if (!el || !sheet || sheet.kind !== "game") return;
+  const s = DB.sessions.find(x=>x.id===V.id);
+  const c = community(s.communityId);
+  const n = c.rules.playerCount;
+  const target = c.rules.startPoints * n;
+  const pts = sheet.draft.points;
+  const filled = pts.filter(p=>p!==null && !isNaN(p));
+  const sum = filled.reduce((a,b)=>a+b,0);
+  const t = document.getElementById("tally");
+  const prev = document.getElementById("preview");
+  const dupes = new Set(sheet.draft.seats).size !== n;
+
+  if (dupes){
+    t.className = "tally ng";
+    t.innerHTML = `<span>同じ人が2席に入っています</span>`;
+    prev.innerHTML = ""; return;
+  }
+  if (filled.length < n){
+    const rest = target - sum;
+    t.className = "tally";
+    // あと1人なら残りは確定するので、ボタンで入れられるようにする
+    t.innerHTML = filled.length === n-1
+      ? `<span>残り <b class="num">${rest.toLocaleString("ja-JP")}</b></span>
+         <button class="btn sm" data-fill-rest style="padding:4px 12px">残りを入れる</button>`
+      : `<span>残り ${n-filled.length}人分</span>
+         <b class="num">${rest.toLocaleString("ja-JP")}</b>`;
+    prev.innerHTML = ""; return;
+  }
+  if (sum !== target){
+    t.className = "tally ng";
+    t.innerHTML = `<span>合計が ${target.toLocaleString("ja-JP")} になりません</span>
+      <b class="num">${(sum-target>0?"+":"")}${(sum-target).toLocaleString("ja-JP")}</b>`;
+    prev.innerHTML = ""; return;
+  }
+  t.className = "tally ok";
+  t.innerHTML = `<span>合計 ${target.toLocaleString("ja-JP")} ✓</span>`;
+
+  const {ranks, scores} = calcGame(pts, c.rules);
+  prev.innerHTML = `<p class="eyebrow" style="margin-top:6px">この半荘の結果</p>
+    <table class="gtbl"><tbody>${sheet.draft.seats.map((mid,i)=>`
+      <tr><td><span class="row"><span class="rp rp${ranks[i]+1}">${ranks[i]+1}</span>
+        <span style="color:var(--ink)">${esc(memberName(c,mid))}</span></span></td>
+        <td class="num muted">${pts[i].toLocaleString("ja-JP")}</td>
+        <td class="num ${cls(scores[i])}" style="font-weight:600">${signed(scores[i])}</td></tr>`).join("")}
+    </tbody></table>`;
+}
+
+function openGameSheet(index){
+  const s = DB.sessions.find(x=>x.id===V.id);
+  const c = community(s.communityId);
+  const n = c.rules.playerCount;
+  let draft;
+  if (index == null){
+    // 直前の半荘の席をずらして初期値にする（抜け番のローテーションに合わせやすくする）
+    const last = s.games[s.games.length-1];
+    let seats;
+    if (last && s.participantIds.length > n){
+      const order = s.participantIds;
+      const start = (order.indexOf(last.seats[0]) + 1) % order.length;
+      seats = Array.from({length:n}, (_,i)=> order[(start+i)%order.length]);
+    } else {
+      seats = s.participantIds.slice(0,n);
+    }
+    draft = {seats, points:Array(n).fill(null), signs:Array(n).fill(1)};
+  } else {
+    const g = s.games[index];
+    draft = {seats:g.seats.slice(), points:g.points.slice(),
+             signs:g.points.map(p=> p < 0 ? -1 : 1)};
+  }
+  sheet = {kind:"game", index, draft, focusFirst:true};
+  render();
+}
+
+/* ========== events ========== */
+document.addEventListener("click", e=>{
+  const t = e.target.closest("button,[data-close-sheet]");
+  if (!t) return;
+  const d = t.dataset;
+
+  if (d.goHome !== undefined) return go({name:"home"});
+  if (d.goCommunity) return go({name:"community", id:d.goCommunity, tab:"stats"});
+  if (d.goSession) return go({name:"session", id:d.goSession});
+  if (d.tab) { V.tab = d.tab; return render(); }
+  if (d.stab) { V.stab = d.stab; return render(); }
+
+  if (d.undo !== undefined){
+    if (!undoData) return;
+    DB = JSON.parse(undoData.db);
+    const back = undoData.view;
+    undoData = null; save();
+    document.querySelectorAll(".toast").forEach(t=>t.remove());
+    go(back);
+    return toast("元に戻しました");
+  }
+
+  if (d.goMember){
+    const [cid, mid] = d.goMember.split(":");
+    // その日の画面から開いたときはその日だけ、成績タブから開いたときは通算
+    const sid = V.name === "session" ? V.id : null;
+    return go({name:"member", cid, mid, sid, back:V});
+  }
+  if (d.goMemberTotal){
+    const [cid, mid] = d.goMemberTotal.split(":");
+    return go({name:"member", cid, mid, sid:null, back:V});
+  }
+  if (d.goBack !== undefined) return go(V.back || {name:"home"});
+
+  if (d.addGuest !== undefined){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    const c = community(s.communityId);
+    return askText("ゲストを追加", "名前", "", "追加", name=>{
+      if (!name.trim()){ toast("名前を入れてください"); return false; }
+      // guestOf を持つ人はこの日だけの参加者。通算には出てこない
+      const m = {id:uid(), name:name.trim(), isMe:false, guestOf:s.id};
+      c.members.push(m);
+      s.participantIds.push(m.id);
+      save();
+    });
+  }
+
+  if (d.newCommunity !== undefined){
+    return askText("コミュニティを作る", "名前（例: 大学の面子、金曜フリー）", "", "作る", name=>{
+      if (!name.trim()){ toast("名前を入れてください"); return false; }
+      const c = {id:uid(), name:name.trim(), members:[], rules:defaultRules(4)};
+      DB.communities.push(c); save();
+      go({name:"community", id:c.id, tab:"settings"});
+      toast("次にメンバーを登録してください");
+    });
+  }
+
+  if (d.addMember !== undefined){
+    const c = community(V.id);
+    return askText("メンバーを追加", "名前", "", "追加", name=>{
+      if (!name.trim()){ toast("名前を入れてください"); return false; }
+      c.members.push({id:uid(), name:name.trim(), isMe:false});
+      save();
+    });
+  }
+  if (d.setMe){
+    const c = community(V.id);
+    const cur = c.members.find(m=>m.id===d.setMe);
+    const on = !cur.isMe;
+    c.members.forEach(m=>{ m.isMe = false; });
+    cur.isMe = on;
+    save(); return render();
+  }
+  if (d.delMember){
+    const c = community(V.id);
+    const used = DB.sessions.some(s=> s.communityId===c.id &&
+      (s.games.some(g=>g.seats.includes(d.delMember)) || s.participantIds.includes(d.delMember)));
+    if (used) return toast("記録に使われているので削除できません");
+    c.members = c.members.filter(m=>m.id!==d.delMember);
+    save(); return render();
+  }
+  if (d.umaPreset){
+    const c = community(V.id);
+    c.rules.uma = UMA_PRESETS[c.rules.playerCount][+d.umaPreset].uma.slice();
+    save(); return render();
+  }
+  if (d.delCommunity !== undefined){
+    const c = community(V.id);
+    return askConfirm("コミュニティを削除", `「${c.name}」と、その記録をすべて削除します。`,
+      "削除する", ()=>{
+        deleteWithUndo(`「${c.name}」を削除しました`, {name:"home"}, ()=>{
+          DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id);
+          DB.communities = DB.communities.filter(x=>x.id!==c.id);
+        });
+      });
+  }
+
+  if (d.newSession !== undefined){
+    const c = community(V.id);
+    if (c.members.length < c.rules.playerCount)
+      return toast(`先に設定タブでメンバーを${c.rules.playerCount}人以上登録してください`);
+    const s = {id:uid(), communityId:c.id, date:today(),
+      participantIds:c.members.map(m=>m.id), games:[], chips:{}, penalties:{}};
+    DB.sessions.push(s); save();
+    return go({name:"session", id:s.id});
+  }
+  if (d.togglePart){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    if (s.participantIds.includes(d.togglePart)){
+      if (s.games.some(g=>g.seats.includes(d.togglePart)))
+        return toast("この人はもう打っているので外せません");
+      if ((s.tips||[]).some(t=>t.toId===d.togglePart || t.fromIds.includes(d.togglePart)))
+        return toast("この人は祝儀に出てくるので外せません");
+      s.participantIds = s.participantIds.filter(p=>p!==d.togglePart);
+    } else {
+      const c = community(s.communityId);
+      s.participantIds = c.members.filter(m=>
+        s.participantIds.includes(m.id) || m.id===d.togglePart).map(m=>m.id);
+    }
+    save(); return render();
+  }
+  if (d.delSession !== undefined){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    return askConfirm("この日の記録を削除", `${fmtDate(s.date)}の${s.games.length}半荘を削除します。`,
+      "削除する", ()=>{
+        const cid = s.communityId;
+        deleteWithUndo(`${fmtDate(s.date)}の記録を削除しました`,
+          {name:"community", id:cid, tab:"log"},
+          ()=>{ DB.sessions = DB.sessions.filter(x=>x.id!==s.id); });
+      });
+  }
+
+  if (d.carrySign){
+    const c = community(V.id);
+    const k = c.id + ":" + d.carrySign;
+    const next = -carrySignOf(c, d.carrySign);
+    carrySign[k] = next;
+    const v = (c.carry||{})[d.carrySign];
+    if (v){ c.carry[d.carrySign] = Math.abs(v) * next; save(); }
+    return render();
+  }
+
+  if (d.penSign){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    const k = s.id + ":" + d.penSign;
+    const next = -penSignOf(s, d.penSign);
+    penSign[k] = next;
+    const v = (s.penalties||{})[d.penSign];
+    if (v){ s.penalties[d.penSign] = Math.abs(v) * next; save(); }
+    return render();
+  }
+
+  if (d.fillRest !== undefined){
+    readDraft();
+    const s = DB.sessions.find(x=>x.id===V.id);
+    const c = community(s.communityId);
+    const pts = sheet.draft.points;
+    const i = pts.findIndex(p=>p === null);
+    if (i < 0) return;
+    const rest = c.rules.startPoints*c.rules.playerCount - pts.reduce((a,p)=>a+(p||0),0);
+    sheet.draft.points[i] = rest;
+    sheet.draft.signs[i] = rest < 0 ? -1 : 1;
+    return renderSheet();
+  }
+
+  if (d.ptSign !== undefined){
+    readDraft();
+    const i = +d.ptSign;
+    sheet.draft.signs[i] = -sheet.draft.signs[i];
+    if (sheet.draft.points[i] != null)
+      sheet.draft.points[i] = Math.abs(sheet.draft.points[i]) * sheet.draft.signs[i];
+    return renderSheet();
+  }
+
+  if (d.toggleGame !== undefined){
+    const gi = +d.toggleGame;
+    const open = V.openGames || [];
+    V.openGames = open.includes(gi) ? open.filter(x=>x!==gi) : open.concat(gi);
+    return render();
+  }
+
+  if (d.addGame !== undefined) return openGameSheet(null);
+  if (d.editGame !== undefined) return openGameSheet(+d.editGame);
+  if (d.closeSheet !== undefined){ sheet = null; return render(); }
+  if (d.saveGame !== undefined){
+    readDraft();
+    const s = DB.sessions.find(x=>x.id===V.id);
+    const c = community(s.communityId);
+    const n = c.rules.playerCount;
+    const {seats, points} = sheet.draft;
+    if (new Set(seats).size !== n) return toast("同じ人が2席に入っています");
+    if (points.some(p=>p===null || isNaN(p))) return toast("持ち点が入っていない席があります");
+    if (points.reduce((a,b)=>a+b,0) !== c.rules.startPoints*n)
+      return toast("持ち点の合計が合っていません");
+    const g = {seats:seats.slice(), points:points.slice()};
+    const isNew = sheet.index == null;
+    if (isNew) s.games.push(g); else s.games[sheet.index] = g;
+    save(); sheet = null; render();
+    return toast(isNew ? "記録しました" : "修正しました");
+  }
+  if (d.delGame !== undefined){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    const gi = sheet.index;
+    sheet = null;
+    return deleteWithUndo(`半荘${gi+1}を削除しました`,
+      Object.assign({}, V, {openGames:[]}),   // 番号がずれるので展開は閉じる
+      ()=>{ s.games.splice(gi,1); });
+  }
+
+  if (d.export !== undefined){ sheet = {kind:"data", mode:"export"}; return render(); }
+  if (d.import !== undefined){ sheet = {kind:"data", mode:"import"}; return render(); }
+
+  if (d.askOk !== undefined){
+    const fn = sheet && sheet.onOk;
+    if (!fn) return;
+    const inp = document.querySelector("[data-ask]");
+    const val = inp ? inp.value : "";
+    const before = sheet;
+    if (fn(val) === false) return;                   // 入力に不備 → シートは開いたまま
+    if (sheet === before){ sheet = null; render(); } // onOk が画面を動かさなかった場合だけ閉じる
+    return;
+  }
+
+  if (d.copy !== undefined){
+    const ta = document.querySelector("textarea[data-ask]");
+    ta.select(); ta.setSelectionRange(0, ta.value.length);
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(ta.value)
+        .then(()=>toast("コピーしました"))
+        .catch(()=>toast("長押しで選択してコピーしてください"));
+    } else {
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch(err){}
+      toast(ok ? "コピーしました" : "長押しで選択してコピーしてください");
+    }
+    return;
+  }
+
+  if (d.download !== undefined){
+    try {
+      const blob = new Blob([JSON.stringify(DB,null,2)], {type:"application/json"});
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `麻雀成績_${today()}.json`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+    } catch(err){ toast("保存できません。上の文字列をコピーしてください"); }
+    return;
+  }
+
+  if (d.doImport !== undefined){
+    const ta = document.querySelector("textarea[data-ask]");
+    let data;
+    try { data = JSON.parse(ta.value); }
+    catch(err){ return toast("読み取れませんでした。全部貼れているか確認してください"); }
+    if (!data || !Array.isArray(data.communities) || !Array.isArray(data.sessions))
+      return toast("麻雀成績のデータではないようです");
+    return askConfirm("データを置き換える",
+      `今の記録を消して、コミュニティ${data.communities.length}件・${data.sessions.length}日分に置き換えます。`,
+      "置き換える", ()=>{
+        DB = Object.assign(newDB(), data); save(); go({name:"home"});
+        toast("読み込みました");
+      });
+  }
+});
+
+// テキスト入力シートは Enter で決定できるようにする
+document.addEventListener("keydown", e=>{
+  if (e.key !== "Enter" || !sheet) return;
+  if (e.target.matches("input[data-ask]")){
+    e.preventDefault();
+    const btn = document.querySelector("[data-ask-ok]");
+    if (btn) btn.click();
+  }
+});
+
+document.addEventListener("input", e=>{
+  const d = e.target.dataset;
+  if (d.pt !== undefined || d.seat !== undefined){ readDraft(); return updateTally(); }
+});
+
+document.addEventListener("change", e=>{
+  const d = e.target.dataset;
+  const val = e.target.value;
+
+  if (d.seat !== undefined){ readDraft(); return updateTally(); }
+
+  if (d.memberName){
+    const c = community(V.id);
+    const m = c.members.find(x=>x.id===d.memberName);
+    if (m && val.trim()){ m.name = val.trim(); save(); }
+    return;
+  }
+  if (d.communityName !== undefined){
+    const c = community(V.id);
+    if (val.trim()){ c.name = val.trim(); save(); render(); }
+    return;
+  }
+  if (d.rule){
+    const c = community(V.id);
+    const num = Math.round(Number(val));
+    if (isNaN(num)) return render();
+    if (d.rule === "playerCount"){
+      if (num !== 3 && num !== 4) return render();
+      if (DB.sessions.some(s=>s.communityId===c.id && s.games.length)){
+        toast("記録があるので人数は変えられません"); return render();
+      }
+      c.rules = Object.assign(defaultRules(num),
+        {rate:c.rules.rate, chipPoints:chipPoints(c), chipStart:chipStart(c)});
+    } else {
+      c.rules[d.rule] = num;
+    }
+    save(); return render();
+  }
+  if (d.uma !== undefined){
+    const c = community(V.id);
+    const num = Math.round(Number(val));
+    if (!isNaN(num)) c.rules.uma[+d.uma] = num;
+    save(); return render();
+  }
+  if (d.chip){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    s.chipCounts = s.chipCounts || {};
+    if (val.trim() === "") delete s.chipCounts[d.chip];
+    else {
+      const num = Math.round(Number(val));
+      if (isNaN(num)) return render();
+      s.chipCounts[d.chip] = num;
+    }
+    if (s.chips) delete s.chips[d.chip]; // 古い増減の記録が残っていれば捨てる
+    save(); return render();
+  }
+  if (d.carry){
+    const c = community(V.id);
+    c.carry = c.carry || {};
+    const raw = val.trim();
+    if (raw === ""){ delete c.carry[d.carry]; save(); return render(); }
+    const num = Number(raw);
+    if (isNaN(num)) return render();
+    let sign = carrySignOf(c, d.carry);
+    if (raw.startsWith("-") || num < 0){ sign = -1; carrySign[c.id+":"+d.carry] = -1; }
+    c.carry[d.carry] = Math.abs(Math.round(num)) * sign;
+    save(); return render();
+  }
+
+  if (d.penalty){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    s.penalties = s.penalties || {};
+    const raw = val.trim();
+    if (raw === ""){ delete s.penalties[d.penalty]; save(); return render(); }
+    const num = Number(raw);
+    if (isNaN(num)) return render();
+    // 「-10」と直接打たれたら、符号ボタンの側もそれに合わせる
+    let sign = penSignOf(s, d.penalty);
+    if (raw.startsWith("-") || num < 0){ sign = -1; penSign[s.id+":"+d.penalty] = -1; }
+    s.penalties[d.penalty] = Math.abs(Math.round(num)) * sign;
+    save(); return render();
+  }
+  if (d.sessionDate !== undefined){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    if (val){ s.date = val; save(); render(); }
+    return;
+  }
+});
+
+render();
+</script>
+</body>
+</html>

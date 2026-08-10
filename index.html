@@ -247,8 +247,15 @@ input.neg{color:var(--bad);font-weight:600}
 .seat .wind{font-family:var(--serif);font-size:16px;width:18px;color:var(--ink-2);flex-shrink:0}
 .seat select{flex:1;min-width:0;font-size:14px;padding:8px 10px}
 .seat .signbtn{flex:0 0 34px;height:38px}
-.seat input{width:92px;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums;
-  padding:8px 10px}
+.seat input{width:100%;text-align:right;font-variant-numeric:tabular-nums;padding:8px 30px 8px 10px}
+/* 100点単位で入れるので、末尾の「00」を欄の中に固定で見せる */
+.ptfield{position:relative;flex:0 0 96px;display:block}
+.ptsuffix{position:absolute;right:11px;top:50%;transform:translateY(-50%);pointer-events:none;
+  font-size:16px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.ptsuffix.neg{color:var(--bad);font-weight:600}
+.resting{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:8px;
+  padding:8px 12px;font-size:13px;color:var(--ink-2)}
+.resting b{color:var(--ink);font-weight:600}
 .tally{display:flex;align-items:center;justify-content:space-between;padding:11px 12px;
   border-radius:8px;background:var(--surface-2);font-size:13px;margin-top:12px}
 .tally.ok{background:color-mix(in srgb,var(--good) 12%,transparent);color:var(--good)}
@@ -1446,22 +1453,30 @@ function sheetGame(){
   const opts = mid => s.participantIds.map(p=>
     `<option value="${p}" ${p===mid?"selected":""}>${esc(memberName(c,p))}</option>`).join("");
 
+  // 5人以上いる日は、この半荘で休む人を出す
+  const resting = s.participantIds.filter(p=>!draft.seats.includes(p));
+
   return `<div class="sheet-hd">
       <h3>${sheet.index==null ? "半荘を追加" : `半荘${sheet.index+1}を修正`}</h3>
       <button class="btn ghost sm" data-close-sheet>やめる</button>
       <button class="btn primary sm" data-save-game>記録する</button>
     </div>
     <div class="sheet-body stack">
-      <p class="muted" style="margin:0">起家から順に、終局時の持ち点を入れてください。</p>
+      <p class="muted" style="margin:0">起家から順に、終局時の持ち点を<b>100点単位</b>で入れてください（32,700点なら 327）。</p>
+      ${resting.length ? `<div class="resting">抜け番　<b>${
+        resting.map(p=>esc(memberName(c,p))).join("・")}</b></div>` : ""}
       <div>
         ${draft.seats.map((mid,i)=>`<div class="seat">
           <span class="wind">${WINDS[i]}</span>
           <select data-seat="${i}">${opts(mid)}</select>
           <button class="signbtn" data-pt-sign="${i}" aria-pressed="${draft.signs[i] < 0}"
             aria-label="${WINDS[i]}家の持ち点の符号を切り替える">${draft.signs[i] < 0 ? "−" : "＋"}</button>
-          <input inputmode="numeric" placeholder="持ち点" data-pt="${i}"
-            class="${draft.signs[i] < 0 ? "neg" : ""}"
-            value="${draft.points[i]===null ? "" : Math.abs(draft.points[i])}">
+          <span class="ptfield">
+            <input inputmode="numeric" placeholder="${Math.round(c.rules.startPoints/100)}"
+              data-pt="${i}" class="${draft.signs[i] < 0 ? "neg" : ""}"
+              value="${draft.points[i]===null ? "" : Math.abs(draft.points[i])/100}">
+            <span class="ptsuffix ${draft.signs[i] < 0 ? "neg" : ""}">00</span>
+          </span>
         </div>`).join("")}
       </div>
       <div class="tally" id="tally"></div>
@@ -1483,9 +1498,10 @@ function readDraft(){
     if (v === ""){ sheet.draft.points[i] = null; return; }
     const num = Number(v);
     if (isNaN(num)){ sheet.draft.points[i] = null; return; }
-    // 「-1200」と直接打たれたら、符号ボタンの側もそれに合わせる
+    // 「-12」と直接打たれたら、符号ボタンの側もそれに合わせる
     if (v.startsWith("-") || num < 0) sheet.draft.signs[i] = -1;
-    sheet.draft.points[i] = Math.abs(Math.round(num)) * sheet.draft.signs[i];
+    // 入力は100点単位。327 → 32,700
+    sheet.draft.points[i] = Math.abs(Math.round(num)) * 100 * sheet.draft.signs[i];
   });
 }
 
@@ -1849,7 +1865,7 @@ document.addEventListener("change", e=>{
   const d = e.target.dataset;
   const val = e.target.value;
 
-  if (d.seat !== undefined){ readDraft(); return updateTally(); }
+  if (d.seat !== undefined){ readDraft(); return renderSheet(); }  // 抜け番の表示も更新する
 
   if (d.memberName){
     const c = community(V.id);

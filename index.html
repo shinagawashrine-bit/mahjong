@@ -481,10 +481,12 @@ const shareScriptId = c => (c.share && c.share.id) || DB.syncId;
 
 /* 保管庫の指定。長いURLを打たずに済むよう、合言葉ひとつでも通す。
    合言葉はソースを読めば分かるので、秘密ではなく「うっかり接続」よりの防止。 */
-const VAULT_CODE = "jyuken";
+const VAULT_CODE = "品川神社";
+/* 変換がうまくいかないときのために、読みでも通す */
+const VAULT_ALIASES = [VAULT_CODE, "しながわじんじゃ", "シナガワジンジャ", "shinagawa"];
 function resolveVault(input){
-  const v = String(input || "").trim();
-  if (v.toLowerCase() === VAULT_CODE) return DEFAULT_SCRIPT_ID;
+  const v = String(input || "").normalize("NFKC").replace(/\s/g, "");
+  if (VAULT_ALIASES.some(a => a.toLowerCase() === v.toLowerCase())) return DEFAULT_SCRIPT_ID;
   const m = v.match(/\/macros\/s\/([\w-]+)\/exec/);
   return m ? m[1] : "";
 }

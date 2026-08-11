@@ -266,7 +266,9 @@ input.neg{color:var(--bad);font-weight:600}
 
 /* ===== ここから下は画面が広いときだけ効く。iPhoneの見た目は変わらない ===== */
 @media (min-width:760px){
-  #app{max-width:760px}
+  /* 外側を少しだけ落として、アプリの列が1枚の紙として見えるようにする */
+  body{background:#D9D9CE}
+  #app{max-width:760px;border-left:1px solid var(--line-soft);border-right:1px solid var(--line-soft)}
   main{padding:20px 20px 24px}
   .tabs{padding:0 20px}
   .hd{padding-left:20px}
@@ -285,13 +287,18 @@ input.neg{color:var(--bad);font-weight:600}
   .gtbl.games .ptval{font-size:12.5px}
   .gtbl.games .ptwind{font-size:11px}
 
+  /* 円グラフと内訳は横に伸ばさない（％が遠くに離れてしまうため） */
+  .pierow{max-width:520px}
+
   /* 精算は「名前・チップ・祝儀ペナ」を横一列に */
-  .ppl{display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:14px;align-items:end;padding:12px 0}
+  .ppl{display:grid;grid-template-columns:minmax(120px,200px) 1fr 1fr;gap:14px;align-items:end;padding:12px 0}
   .ppl-name{margin-bottom:0;align-self:center}
   .ppl-fields{display:contents}
 
   /* 入力用のシートは下から浮かせて、独立した箱に見せる */
-  .sheet{bottom:24px;border-radius:16px;max-height:calc(92vh - 48px)}
+  /* 広い画面では下に貼り付かず、画面の中央に浮かべる（transform は出現の動きに使うので使わない） */
+  .sheet{top:0;bottom:0;height:fit-content;margin:auto;
+    border-radius:16px;max-height:calc(100vh - 64px)}
 
   /* 設定は入力欄なので横に伸ばしすぎない */
   main.narrow{max-width:600px;margin-left:auto;margin-right:auto}
@@ -1755,10 +1762,14 @@ function fitSheetAboveKeyboard(){
   const vv = window.visualViewport;
   if (!el || !vv) return;
   const hidden = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
-  // 広い画面でキーボードが出ていないときは、CSS側の位置（少し浮かせた形）に任せる
-  if (!hidden && window.matchMedia("(min-width:760px)").matches){
-    el.style.bottom = ""; el.style.maxHeight = ""; return;
+  const wide = window.matchMedia("(min-width:760px)").matches;
+  // 広い画面でキーボードが出ていないときは、CSS側の位置（画面中央）に任せる
+  if (!hidden && wide){
+    el.style.bottom = ""; el.style.maxHeight = ""; el.style.top = ""; el.style.margin = "";
+    return;
   }
+  // iPadでキーボードが出たときは、中央寄せをやめて鍵盤の上に置き直す
+  if (wide){ el.style.top = "auto"; el.style.margin = "0 auto"; }
   el.style.bottom = hidden + "px";
   el.style.maxHeight = Math.round(vv.height * 0.94) + "px";
 }

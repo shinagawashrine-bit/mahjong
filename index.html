@@ -2541,16 +2541,21 @@ document.addEventListener("change", e=>{
   }
 });
 
-/* 窓の幅を変えて広い⇔狭いをまたいだときだけ描き直す（グラフの形を切り替えるため）。
-   入力中やシートを開いている間は触らない。iPhoneのキーボードでは幅が変わらないので発火しない。 */
-window.addEventListener("resize", ()=>{
-  const now = window.matchMedia("(min-width:760px)").matches;
-  if (now === WIDE) return;
+/* 広い⇔狭いをまたいだときだけ描き直す（グラフの形を切り替えるため）。
+   窓の大きさ変更・iPadの回転やSplit Viewのどれでも確実に効くよう、
+   幅そのものではなくメディアクエリの切り替わりを見る。
+   入力中やシートを開いている間は触らない。 */
+const wideQuery = window.matchMedia("(min-width:760px)");
+const onWideChange = ()=>{
+  if (wideQuery.matches === WIDE) return;
   if (sheet) return;
   const a = document.activeElement;
   if (a && (a.tagName === "INPUT" || a.tagName === "SELECT" || a.tagName === "TEXTAREA")) return;
   render();
-});
+};
+if (wideQuery.addEventListener) wideQuery.addEventListener("change", onWideChange);
+else wideQuery.addListener(onWideChange);          // 古いSafari向け
+window.addEventListener("resize", onWideChange);   // 念のための二重がけ
 
 render();
 loadSetup();

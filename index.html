@@ -59,7 +59,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 /* ---- generic ---- */
 main{padding:16px}
 .stack{display:flex;flex-direction:column;gap:14px}
-.cards{display:grid;grid-template-columns:1fr;gap:14px}
+.cards{display:contents}
 .row{display:flex;align-items:center;gap:10px}
 .between{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .card{background:var(--surface);border:1px solid var(--line-soft);border-radius:10px;
@@ -272,7 +272,7 @@ input.neg{color:var(--bad);font-weight:600}
   .hd{padding-left:20px}
 
   /* カードを2列に並べる */
-  .cards{grid-template-columns:1fr 1fr;align-items:start}
+  .cards{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
 
   /* グラフは横幅いっぱいまで伸ばす（縦は比率どおり） */
   .scroller svg{width:100%;height:auto}
@@ -1105,14 +1105,16 @@ const fmtAxisDate = (iso, withYear) => {
 
 /* 折れ線グラフの共通部分。series は順位の高い順に並べて渡す。
    線の色は1位から 金・銀・銅・紺 の順。 */
-function lineChart(series, minPad, left, mid, right){
+function lineChart(series, minPad, left, mid, right, wide){
   const len = Math.max(...series.map(s=>s.pts.length));
   const all = series.flatMap(s=>s.pts);
   const lo = Math.min(...all, 0), hi = Math.max(...all, 0);
   const pad = Math.max(minPad, (hi-lo)*0.12);
   const y0 = lo-pad, y1 = hi+pad;
-  // 画面が広いときは横長に描く。文字の大きさが伸びすぎないようにするため
-  const W = WIDE ? 760 : 360, H = WIDE ? 210 : 150;
+  /* 広い画面で全幅に置くグラフだけ横長にする。
+     入る枠より viewBox が小さいと軸の文字まで拡大され、大きいと潰れて読めなくなるため、
+     置かれる場所の広さに合わせて呼び出し側が指定する。 */
+  const W = wide ? 760 : 360, H = wide ? 210 : 150;
   const L=46, R=6, T=10, B=10;
   const px = i => L + (len<=1 ? 0 : i/(len-1))*(W-L-R);
   const py = v => T + (1-(v-y0)/(y1-y0))*(H-T-B);
@@ -1170,7 +1172,7 @@ function dayChart(s, c){
   });
   series.sort((a,b)=> b.pts[b.pts.length-1] - a.pts[a.pts.length-1]);
 
-  const g = lineChart(series, 5, "半荘1", `全${s.games.length}半荘`, `半荘${s.games.length}`);
+  const g = lineChart(series, 5, "半荘1", `全${s.games.length}半荘`, `半荘${s.games.length}`, false);
   const legend = series.map((se,k)=>{
     const v = se.pts[se.pts.length-1];
     return `<span><i style="background:${g.colorOf(k)}"></i>${esc(se.name)}
@@ -1210,8 +1212,9 @@ function chart(c, st){
 
   const first = sessions[0], lastS = sessions[sessions.length-1];
   const crossYear = first.date.slice(0,4) !== lastS.date.slice(0,4);
+  // 成績タブのグラフは横いっぱいに置くので、広い画面では横長に描く
   const g = lineChart(series, 100,
-    fmtAxisDate(first.date, false), `${sessions.length}日`, fmtAxisDate(lastS.date, crossYear));
+    fmtAxisDate(first.date, false), `${sessions.length}日`, fmtAxisDate(lastS.date, crossYear), WIDE);
 
   // 凡例には最新（今の累計）を円で添える
   const legend = series.map((s,k)=>{
@@ -1344,8 +1347,8 @@ function tabSettings(c){
             編集者のリンクは、代わりに記録してもらう人にだけ渡してください。
             2人が同時に入力すると、あとから送られた方で上書きされます。</p>
           <div class="row" style="gap:8px;margin-top:10px">
-            <button class="btn sm" data-push-share>今すぐ送る</button>
-            <button class="btn sm" data-refresh-share>今すぐ受け取る</button>
+            <button class="btn sm" data-push-share>データを保存</button>
+            <button class="btn sm" data-refresh-share>データを更新</button>
             <button class="btn ghost sm danger" data-stop-share>共有をやめる</button>
           </div>
           ${SHARE_STATE ? `<p class="muted" style="margin:6px 0 0;font-size:11.5px">${esc(SHARE_STATE)}</p>` : ""}`

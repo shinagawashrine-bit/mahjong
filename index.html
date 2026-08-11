@@ -691,6 +691,7 @@ const community = id => DB.communities.find(c=>c.id===id);
    あとで設定を変えても過去の記録は変わらない。
    控えのない古い記録は、コミュニティの今のルールで読む。 */
 const rulesOf = s => s.rules || community(s.communityId).rules;
+const tableName = n => n === 3 ? "三麻" : "四麻";   // 人数の呼び方
 const chipStart  = r => r.chipStart ?? 20;   // 1人が最初に持つチップ枚数
 const chipPoints = r => r.chipPoints ?? 2;   // チップ1枚が何ポイントか
 
@@ -972,7 +973,7 @@ function viewHome(){
               c.sharedFrom ? `<span class="roletag ${c.readOnly?"view":"edit"}">${
                 c.readOnly ? "閲覧者" : "編集者"}</span>`
               : c.share ? `<span class="roletag own">共有中</span>` : ""}</div>
-            <div class="muted num">${Math.round(total)}半荘 · ${regulars(c).length}人 · ${c.rules.playerCount}人打ち</div>
+            <div class="muted num">${Math.round(total)}半荘 · ${regulars(c).length}人 · ${tableName(c.rules.playerCount)}</div>
           </div>
           <span class="chev">›</span>
         </div>
@@ -1296,8 +1297,8 @@ function tabSettings(c){
       <h2 class="sec">ルール</h2>
       <label class="fld">人数
         <select data-rule="playerCount">
-          <option value="4" ${r.playerCount===4?"selected":""}>4人麻雀</option>
-          <option value="3" ${r.playerCount===3?"selected":""}>3人麻雀</option>
+          <option value="4" ${r.playerCount===4?"selected":""}>四麻</option>
+          <option value="3" ${r.playerCount===3?"selected":""}>三麻</option>
         </select></label>
       <div class="grid2">
         <label class="fld">配給原点
@@ -1716,7 +1717,7 @@ function viewSession(){
       <div class="card card-p">
         <p class="eyebrow" style="margin:0 0 6px">この日のルール</p>
         <div class="muted num" style="font-size:11.5px;line-height:1.8">
-          ${R.playerCount}人打ち・配給原点 ${R.startPoints.toLocaleString("ja-JP")}・返し点 ${R.returnPoints.toLocaleString("ja-JP")}<br>
+          ${tableName(R.playerCount)}・配給原点 ${R.startPoints.toLocaleString("ja-JP")}・返し点 ${R.returnPoints.toLocaleString("ja-JP")}<br>
           ウマ ${umaTxt}・${R.tieBreak==="split"?"同点は山分け":"同点は上家優先"}<br>
           レート ${R.rate}円・チップ1枚 ${chipPoints(R)}ポイント・持ち枚数 ${chipStart(R)}枚
         </div>

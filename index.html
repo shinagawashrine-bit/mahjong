@@ -733,6 +733,7 @@ function tipDelta(s, mid){
 }
 /* 飛び賞：持ち点がマイナスで終わった人（0点ちょうどは飛びにしない）が、
    飛ばした人へ決まったポイントを払う。半荘ごとに g.tobiBy = {飛んだ人: 飛ばした人} で持つ。
+   飛ばした人が "manual" のときは自動では動かさない（ダブロンなどは精算タブで手入力する）。
    成績（着順・素点）には混ぜず、祝儀・ペナルティに足して扱う。 */
 const tobiOn     = r => !!r.tobi;
 const tobiPoints = r => r.tobiPoints ?? 10;
@@ -2008,10 +2009,11 @@ function updateTally(){
     const fliers = seats.filter((mid,i)=> pts[i] < 0);
     const alive  = seats.filter((mid,i)=> pts[i] >= 0);
     tb.innerHTML = fliers.map(from=>`<label class="fld">
-        <span><b>${esc(memberName(c,from))}</b> が飛びました。飛ばした人は？（${tobiPoints(R)}ポイント）</span>
+        <span>${fliers.length > 1 ? `${esc(memberName(c,from))}を飛ばした人` : "飛ばした人"}</span>
         <select data-tobi-from="${from}">
           <option value="">選んでください</option>
           ${alive.map(to=>`<option value="${to}" ${by[from]===to?"selected":""}>${esc(memberName(c,to))}</option>`).join("")}
+          <option value="manual" ${by[from]==="manual"?"selected":""}>手動</option>
         </select></label>`).join("");
   }
 
@@ -2439,7 +2441,7 @@ document.addEventListener("click", e=>{
       for (let i = 0; i < n; i++){
         if (!(points[i] < 0)) continue;
         const to = by[seats[i]];
-        if (!to || !seats.includes(to) || points[seats.indexOf(to)] < 0)
+        if (to !== "manual" && (!to || !seats.includes(to) || points[seats.indexOf(to)] < 0))
           return toast(`${memberName(community(s.communityId), seats[i])}を飛ばした人を選んでください`);
         tobiBy[seats[i]] = to;
       }

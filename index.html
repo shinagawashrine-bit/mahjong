@@ -469,7 +469,9 @@ function defaultRules(playerCount){
     rate: 100,
     chipPoints: 2,
     chipStart: 20,
-    tieBreak: "seat"
+    tieBreak: "seat",
+    tobi: false,
+    tobiPoints: 10
   };
 }
 
@@ -729,6 +731,25 @@ function tipDelta(s, mid){
     return a;
   }, 0);
 }
+/* 飛び賞：持ち点がマイナスで終わった人（0点ちょうどは飛びにしない）が、
+   飛ばした人へ決まったポイントを払う。半荘ごとに g.tobiBy = {飛んだ人: 飛ばした人} で持つ。
+   成績（着順・素点）には混ぜず、祝儀・ペナルティに足して扱う。 */
+const tobiOn     = r => !!r.tobi;
+const tobiPoints = r => r.tobiPoints ?? 10;
+function tobiDelta(s, mid){
+  const R = rulesOf(s);
+  if (!tobiOn(R)) return 0;
+  return s.games.reduce((a,g)=>{
+    Object.entries(g.tobiBy||{}).forEach(([from,to])=>{
+      const i = g.seats.indexOf(from);
+      if (i < 0 || !(g.points[i] < 0) || !g.seats.includes(to)) return;  // 後から持ち点を直した場合に備える
+      if (from === mid) a -= tobiPoints(R);
+      if (to === mid)   a += tobiPoints(R);
+    });
+    return a;
+  }, 0);
+}
+
 const sessionsOf = cid => DB.sessions.filter(s=>s.communityId===cid)
   .sort((a,b)=> a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
 const memberName = (c,id) => (c.members.find(m=>m.id===id)||{name:"(削除済)"}).name;
@@ -770,6 +791,12 @@ function statsOf(cid){
       st.money += pt * R.rate;
     });
     Object.entries(s.penalties||{}).forEach(([mid,v])=>{
+      if (!v || isGuest(c, mid)) return;
+      const st = ensure(mid);
+      st.penalty += v; st.extraPoints += v; st.money += v * R.rate;
+    });
+    if (tobiOn(R)) s.participantIds.forEach(mid=>{
+      const v = tobiDelta(s, mid);
       if (!v || isGuest(c, mid)) return;
       const st = ensure(mid);
       st.penalty += v; st.extraPoints += v; st.money += v * R.rate;
@@ -858,7 +885,8 @@ function sessionTotals(s){
   Object.entries(t).forEach(([mid,e])=>{
     e.chips = chipDelta(s, mid);
     e.tips = tipDelta(s, mid);
-    e.penalty = (s.penalties||{})[mid] || 0;
+    e.tobi = tobiDelta(s, mid);
+    e.penalty = ((s.penalties||{})[mid] || 0) + e.tobi;   // 飛び賞は祝儀・ペナルティに含める
     e.extraPoints = e.chips*chipPoints(R) + e.tips + e.penalty;  // チップ＋祝儀＋ペナルティ
     e.money = Math.round((e.score + e.extraPoints) * R.rate);
   });
@@ -1319,19 +1347,31 @@ function tabSettings(c){
         </div>
       </div>
       <div class="grid2">
-        <label class="fld">レート（1000点＝円）
+        <label class="fld">レート（1ポイント＝円）
           <input inputmode="numeric" value="${r.rate}" data-rule="rate"></label>
         <label class="fld">チップ（1枚＝ポイント）
           <input inputmode="numeric" value="${chipPoints(c.rules)}" data-rule="chipPoints"></label>
       </div>
-      <label class="fld">チップの持ち枚数（1人が最初に持つ枚数）
+      <label class="fld">チップの枚数
         <input inputmode="numeric" value="${chipStart(c.rules)}" data-rule="chipStart"></label>
+      <div>
+        <div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">飛び賞</div>
+        <div class="row" style="gap:10px;align-items:center">
+          <div class="chiprow" style="flex:0 0 auto">
+            <button class="chip" aria-pressed="${tobiOn(r)}" data-tobi-rule="on">あり</button>
+            <button class="chip" aria-pressed="${!tobiOn(r)}" data-tobi-rule="off">なし</button>
+          </div>
+          ${tobiOn(r) ? `<label class="fld" style="flex:1;min-width:0">
+            <span style="font-size:11px">ポイント</span>
+            <input inputmode="numeric" value="${tobiPoints(r)}" data-rule="tobiPoints"></label>` : ""}
+        </div>
+        ${tobiOn(r) ? `<p class="muted" style="margin:6px 0 0">ポイントは祝儀・ペナルティに入ります。</p>` : ""}
+      </div>
       <label class="fld">同点で終わったとき
         <select data-rule="tieBreak">
           <option value="seat" ${(r.tieBreak||"seat")==="seat"?"selected":""}>上家優先（起家に近い人が上位）</option>
           <option value="split" ${r.tieBreak==="split"?"selected":""}>順位点を山分け</option>
         </select></label>
-      <p class="muted">ルールの変更は次に始める卓から適用されます。過去の記録は、その日のルールのまま変わりません。</p>
       <button class="btn sm" data-apply-rules-to-past>過去の記録にも今のルールを適用</button>
     </div>
 
@@ -1443,7 +1483,7 @@ function viewMember(){
         <div class="statgrid">
           <div class="stat"><div class="k">成績</div>
             <div class="v ${cls(totalScore)}">${signed(totalScore)}</div></div>
-          <div class="stat"><div class="k">チップ</div>
+          <div class="stat"><div class="k">チップ等</div>
             <div class="v ${cls(st.extraPoints||0)}">${signed(st.extraPoints||0)}</div></div>
           <div class="stat"><div class="k">収支</div>
             <div class="v ${cls(st.money)}" style="font-size:16px">${yen(st.money)}</div>
@@ -1576,7 +1616,7 @@ function viewSession(){
       <div class="${s.games.length ? "cards" : ""}">
         <div class="card"><div class="card-p" style="padding-bottom:6px"><p class="eyebrow">今日の収支</p></div>
           <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
-            <thead><tr><th>名前</th><th>半荘数</th><th>成績</th><th>チップ</th><th>収支</th></tr></thead>
+            <thead><tr><th>名前</th><th>半荘数</th><th>成績</th><th>${tobiOn(R) ? "チップ・飛び" : "チップ"}</th><th>収支</th></tr></thead>
             <tbody>${totalsRows}</tbody></table></div></div>
         ${dayChart(s, c)}
       </div>
@@ -1611,7 +1651,8 @@ function viewSession(){
                   class="${penSignOf(s,mid) < 0 ? "neg" : ""}"
                   aria-label="${esc(memberName(c,mid))}の祝儀・ペナルティ"
                   value="${(s.penalties||{})[mid] ? Math.abs(s.penalties[mid]) : ""}">
-              </span></div>
+              </span>${(()=>{ const v = tobiDelta(s, mid);
+                return v ? `<span class="num ${cls(v)}" style="font-size:12px;display:block;margin-top:4px">飛び賞 ${signed(v)}（自動）</span>` : ""; })()}</div>
           </div>
         </div>`;}).join("")}
         ${(()=>{
@@ -1702,7 +1743,7 @@ function viewSession(){
             <div class="v ${cls(e.score)}">${signed(e.score)}</div></div>
           <div class="stat"><div class="k">チップ</div>
             <div class="v ${cls(e.chips)}">${signed(e.chips)}枚</div></div>
-          ${e.penalty ? `<div class="stat"><div class="k">祝儀・ペナルティ</div>
+          ${e.penalty ? `<div class="stat"><div class="k">${tobiOn(R) ? "祝儀・飛び" : "祝儀・ペナルティ"}</div>
             <div class="v ${cls(e.penalty)}">${signed(e.penalty)}</div></div>` : ""}
         </div>
         ${e.games ? `<div class="card-p" style="padding-top:10px">
@@ -1719,7 +1760,8 @@ function viewSession(){
         <div class="muted num" style="font-size:11.5px;line-height:1.8">
           ${tableName(R.playerCount)}・配給原点 ${R.startPoints.toLocaleString("ja-JP")}・返し点 ${R.returnPoints.toLocaleString("ja-JP")}<br>
           ウマ ${umaTxt}・${R.tieBreak==="split"?"同点は山分け":"同点は上家優先"}<br>
-          レート ${R.rate}円・チップ1枚 ${chipPoints(R)}ポイント・持ち枚数 ${chipStart(R)}枚
+          レート ${R.rate}円・チップ1枚 ${chipPoints(R)}ポイント・持ち枚数 ${chipStart(R)}枚<br>
+          飛び賞 ${tobiOn(R) ? `${tobiPoints(R)}ポイント（飛ばした人へ）` : "なし"}
         </div>
       </div>
     </main>`;
@@ -1870,7 +1912,7 @@ function sheetGame(){
       <button class="btn primary sm" data-save-game>記録する</button>
     </div>
     <div class="sheet-body stack">
-      <p class="muted" style="margin:0">起家から順に、終局時の持ち点を<b>100点単位</b>で入れてください（32,700点なら 327）。</p>
+      <p class="muted" style="margin:0">起家から順に、終局時の持ち点を<b>100点単位</b>で入れてください。</p>
       <div class="between" style="gap:10px">
         <span class="resting" style="flex:1;min-width:0">${resting.length
           ? `抜け番　<b>${resting.map(p=>esc(memberName(c,p))).join("・")}</b>`
@@ -1892,6 +1934,7 @@ function sheetGame(){
         </div>`).join("")}
       </div>
       <div class="tally" id="tally"></div>
+      <div id="tobi"></div>
       <button class="btn wide primary" data-save-game>この半荘を記録する</button>
       ${sheet.index!=null ? `<button class="btn wide danger" data-del-game>この半荘を削除</button>` : ""}
       <div id="preview"></div>
@@ -1930,6 +1973,8 @@ function updateTally(){
   const sum = filled.reduce((a,b)=>a+b,0);
   const t = document.getElementById("tally");
   const prev = document.getElementById("preview");
+  const tb = document.getElementById("tobi");
+  tb.innerHTML = "";
   const dupes = new Set(sheet.draft.seats).size !== n;
 
   if (dupes){
@@ -1956,6 +2001,19 @@ function updateTally(){
   }
   t.className = "tally ok";
   t.innerHTML = `<span>合計 ${target.toLocaleString("ja-JP")} ✓</span>`;
+
+  if (tobiOn(R)){
+    const seats = sheet.draft.seats;
+    const by = sheet.draft.tobiBy || (sheet.draft.tobiBy = {});
+    const fliers = seats.filter((mid,i)=> pts[i] < 0);
+    const alive  = seats.filter((mid,i)=> pts[i] >= 0);
+    tb.innerHTML = fliers.map(from=>`<label class="fld">
+        <span><b>${esc(memberName(c,from))}</b> が飛びました。飛ばした人は？（${tobiPoints(R)}ポイント）</span>
+        <select data-tobi-from="${from}">
+          <option value="">選んでください</option>
+          ${alive.map(to=>`<option value="${to}" ${by[from]===to?"selected":""}>${esc(memberName(c,to))}</option>`).join("")}
+        </select></label>`).join("");
+  }
 
   const {ranks, scores} = calcGame(pts, R);
   prev.innerHTML = `<p class="eyebrow" style="margin-top:6px">この半荘の結果</p>
@@ -1986,7 +2044,7 @@ function openGameSheet(index){
   } else {
     const g = s.games[index];
     draft = {seats:g.seats.slice(), points:g.points.slice(),
-             signs:g.points.map(p=> p < 0 ? -1 : 1)};
+             signs:g.points.map(p=> p < 0 ? -1 : 1), tobiBy:Object.assign({}, g.tobiBy)};
   }
   sheet = {kind:"game", index, draft, focusFirst:true};
   render();
@@ -2058,8 +2116,15 @@ document.addEventListener("click", e=>{
     readDraft();
     const s = DB.sessions.find(x=>x.id===V.id);
     const order = s.participantIds, n = rulesOf(s).playerCount;
-    const start = (order.indexOf(sheet.draft.seats[0]) + 1) % order.length;
-    sheet.draft.seats = Array.from({length:n}, (_,i)=> order[(start+i)%order.length]);
+    const seats = sheet.draft.seats;
+    if (order.length > n){
+      // 抜け番がいる日は、参加メンバーの並びで1人ずつずらして抜け番を回す
+      const start = (order.indexOf(seats[0]) + 1) % order.length;
+      sheet.draft.seats = Array.from({length:n}, (_,i)=> order[(start+i)%order.length]);
+    } else {
+      // 全員が打つ日は、今の席から家を1つ繰り上げる（南→東、西→南、北→西、東→北）
+      sheet.draft.seats = seats.map((_,i)=> seats[(i+1)%n]);
+    }
     return renderSheet();
   }
 
@@ -2226,6 +2291,12 @@ document.addEventListener("click", e=>{
       x.participantIds = x.participantIds.filter(p=>p!==id); });
     save(); return render();
   }
+  if (d.tobiRule){
+    const c = community(V.id);
+    c.rules.tobi = d.tobiRule === "on";
+    if (c.rules.tobiPoints == null) c.rules.tobiPoints = 10;
+    save(); return render();
+  }
   if (d.umaPreset){
     const c = community(V.id);
     c.rules.uma = UMA_PRESETS[c.rules.playerCount][+d.umaPreset].uma.slice();
@@ -2362,6 +2433,18 @@ document.addEventListener("click", e=>{
     if (points.reduce((a,b)=>a+b,0) !== R.startPoints*n)
       return toast("持ち点の合計が合っていません");
     const g = {seats:seats.slice(), points:points.slice()};
+    if (tobiOn(R)){
+      const by = sheet.draft.tobiBy || {};
+      const tobiBy = {};
+      for (let i = 0; i < n; i++){
+        if (!(points[i] < 0)) continue;
+        const to = by[seats[i]];
+        if (!to || !seats.includes(to) || points[seats.indexOf(to)] < 0)
+          return toast(`${memberName(community(s.communityId), seats[i])}を飛ばした人を選んでください`);
+        tobiBy[seats[i]] = to;
+      }
+      if (Object.keys(tobiBy).length) g.tobiBy = tobiBy;
+    }
     const isNew = sheet.index == null;
     if (isNew) s.games.push(g); else s.games[sheet.index] = g;
     save(); sheet = null; render();
@@ -2453,6 +2536,11 @@ document.addEventListener("change", e=>{
   const val = e.target.value;
 
   if (d.seat !== undefined){ readDraft(); return renderSheet(); }  // 抜け番の表示も更新する
+  if (d.tobiFrom !== undefined){
+    sheet.draft.tobiBy = sheet.draft.tobiBy || {};
+    if (val) sheet.draft.tobiBy[d.tobiFrom] = val; else delete sheet.draft.tobiBy[d.tobiFrom];
+    return;
+  }
 
   if (d.memberName){
     const c = community(V.id);
@@ -2476,7 +2564,7 @@ document.addEventListener("change", e=>{
     if (val.trim() === "") return render();
     const num = Math.round(Number(val));
     if (isNaN(num)) return render();
-    const least = {startPoints:1000, returnPoints:1000, rate:0, chipPoints:0, chipStart:0};
+    const least = {startPoints:1000, returnPoints:1000, rate:0, chipPoints:0, chipStart:0, tobiPoints:0};
     if (d.rule in least && num < least[d.rule]) return render();
     if (d.rule === "playerCount"){
       if (num !== 3 && num !== 4) return render();
@@ -2484,7 +2572,8 @@ document.addEventListener("change", e=>{
         toast("記録があるので人数は変えられません"); return render();
       }
       c.rules = Object.assign(defaultRules(num),
-        {rate:c.rules.rate, chipPoints:chipPoints(c.rules), chipStart:chipStart(c.rules)});
+        {rate:c.rules.rate, chipPoints:chipPoints(c.rules), chipStart:chipStart(c.rules),
+         tobi:tobiOn(c.rules), tobiPoints:tobiPoints(c.rules)});
     } else {
       c.rules[d.rule] = num;
     }

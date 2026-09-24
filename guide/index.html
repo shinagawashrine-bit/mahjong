@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>麻雀成績アプリ 使い方ガイド</title>
+<style>
+  @page { size: A4; margin: 14mm 14mm 16mm; }
+  :root{
+    --ink:#23261f; --ink2:#5d6157; --line:#d9d9ce; --paper:#f5f4ee;
+    --accent:#a9392b; --accent-soft:#f6e3df; --ok:#3f6b4a; --ok-soft:#e3ece2;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; color:var(--ink); background:#fff;
+    font-family:"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    font-size:10.5pt; line-height:1.75; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+  h1,h2,h3{ font-family:"Hiragino Mincho ProN","Noto Serif JP",serif; font-weight:600; margin:0; }
+  p{ margin:0 0 .6em; }
+  b{ font-weight:600; }
+
+  /* 表紙 */
+  .cover{ height:255mm; display:flex; flex-direction:column; justify-content:center;
+    page-break-after:always; padding:0 6mm; }
+  .cover .kicker{ color:var(--accent); font-size:11pt; letter-spacing:.2em; margin-bottom:6mm; }
+  .cover h1{ font-size:30pt; line-height:1.35; }
+  .cover .sub{ color:var(--ink2); font-size:12pt; margin-top:6mm; }
+  .cover .toc{ margin-top:18mm; border-top:1px solid var(--line); padding-top:6mm; }
+  .cover .toc div{ display:flex; gap:5mm; padding:1.6mm 0; font-size:11pt; }
+  .cover .toc span{ color:var(--accent); font-weight:600; width:9mm; }
+
+  section{ page-break-before:always; }
+  .chapter{ display:flex; align-items:baseline; gap:4mm; border-bottom:2px solid var(--ink);
+    padding-bottom:2.5mm; margin-bottom:6mm; }
+  .chapter .no{ color:var(--accent); font-size:22pt; font-family:"Hiragino Mincho ProN",serif; }
+  .chapter h2{ font-size:18pt; }
+  .lead{ color:var(--ink2); margin-bottom:6mm; }
+
+  /* 手順：左に説明、右に画面 */
+  .step{ display:grid; grid-template-columns:1fr 54mm; gap:8mm; align-items:start;
+    page-break-inside:avoid; margin-bottom:7mm; }
+  .step.solo{ grid-template-columns:1fr; }
+  .step h3{ font-size:13pt; margin-bottom:2.5mm; display:flex; gap:3mm; align-items:baseline; }
+  .step h3 .n{ flex:0 0 auto; width:7mm; height:7mm; border-radius:50%; background:var(--accent);
+    color:#fff; font:600 10pt/7mm "Hiragino Sans",sans-serif; text-align:center; }
+  .shot{ width:54mm; border-radius:3mm; border:0.8mm solid #2b2d28; overflow:hidden; background:#e4e4da; }
+  .shot img{ display:block; width:100%; }
+  .cap{ font-size:8.5pt; color:var(--ink2); text-align:center; margin-top:1.5mm; }
+
+  .note{ background:var(--accent-soft); border-left:3px solid var(--accent); padding:3mm 4mm;
+    border-radius:0 2mm 2mm 0; margin:3mm 0; font-size:10pt; page-break-inside:avoid; }
+  .note.ok{ background:var(--ok-soft); border-left-color:var(--ok); }
+  .note .t{ font-weight:600; display:block; margin-bottom:1mm; }
+  ul{ margin:0 0 .6em; padding-left:1.3em; }
+  li{ margin:.15em 0; }
+  .key{ display:inline-block; border:1px solid var(--line); background:var(--paper); border-radius:1.5mm;
+    padding:0 2mm; font-size:9.5pt; line-height:1.6; white-space:nowrap; }
+  .key.red{ background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .two{ display:grid; grid-template-columns:1fr 1fr; gap:6mm; page-break-inside:avoid; }
+  .card{ border:1px solid var(--line); border-radius:3mm; padding:4mm 5mm; background:var(--paper); }
+  .card h3{ font-size:12pt; margin-bottom:2mm; }
+  .tag{ display:inline-block; font-size:8.5pt; border-radius:1mm; padding:0 1.8mm; margin-left:1.5mm;
+    vertical-align:2px; font-family:"Hiragino Sans",sans-serif; }
+  .tag.edit{ background:var(--accent); color:#fff; }
+  .tag.view{ background:#6b7280; color:#fff; }
+
+  table.faq{ width:100%; border-collapse:collapse; font-size:10pt; }
+  table.faq td{ border-top:1px solid var(--line); padding:3mm 2mm; vertical-align:top; }
+  table.faq td:first-child{ width:40%; font-weight:600; }
+
+  /* 画面で読むとき（アプリの「使い方」から開いたとき）。印刷・PDFには効かない */
+  @media screen{
+    body{ max-width:760px; margin:0 auto; padding:0 16px 48px; font-size:15px; }
+    .cover{ height:auto; padding:40px 0 8px; }
+    .cover h1{ font-size:30px; }
+    section{ margin-top:44px; }
+    .step{ grid-template-columns:1fr 230px; gap:24px; }
+    .shot{ width:230px; }
+  }
+  @media screen and (max-width:620px){
+    .step{ grid-template-columns:1fr; gap:10px; }
+    .step > div:last-child{ justify-self:center; }
+    .shot{ width:min(300px, 86vw); }
+    .two{ grid-template-columns:1fr; }
+    table.faq td{ display:block; width:auto !important; padding:6px 0; }
+    table.faq td:first-child{ padding-top:14px; }
+    table.faq td + td{ border-top:0; }
+  }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="kicker">MAHJONG SCORE</div>
+  <h1>麻雀成績アプリ<br>使い方ガイド</h1>
+  <div class="sub">リンクを受け取った仲間向け</div>
+  <div class="toc">
+    <div><span>1</span>はじめに ― リンクは2種類あります</div>
+    <div><span>2</span>アプリを開く・ホーム画面に追加する</div>
+    <div><span>3</span>成績を見る</div>
+    <div><span>4</span>点数を入れる（入力用リンクの人）</div>
+    <div><span>5</span>チップ・メンバー・その日のルール</div>
+    <div><span>6</span>困ったとき</div>
+  </div>
+</div>
+
+<!-- 1 -->
+<section>
+  <div class="chapter"><span class="no">1</span><h2>はじめに ― リンクは2種類あります</h2></div>
+  <p class="lead">このアプリは、仲間内の麻雀の成績を記録して、みんなで見られるようにするものです。受け取ったリンクによって、できることが変わります。</p>
+
+  <div class="two">
+    <div class="card">
+      <h3>見るだけのリンク<span class="tag view">閲覧者</span></h3>
+      <p>成績・収支・グラフを見られます。点数の入力や修正はできません。</p>
+      <p style="margin:0;color:var(--ink2);font-size:9.5pt">リンクの形：…/mahjong/?<b>s</b>=○○○</p>
+    </div>
+    <div class="card">
+      <h3>入力用のリンク<span class="tag edit">編集者</span></h3>
+      <p>見ることに加えて、その日の卓を始めたり、点数を入れたりできます。</p>
+      <p style="margin:0;color:var(--ink2);font-size:9.5pt">リンクの形：…/mahjong/?<b>e</b>=○○○</p>
+    </div>
+  </div>
+
+  <div class="step" style="margin-top:9mm">
+    <div>
+      <h3><span class="n">!</span>自分がどちらか確かめる</h3>
+      <p>アプリを開くと、いちばん上の画面にコミュニティ名が出ます。名前の横の小さな印が<span class="tag edit">編集者</span>なら入力用、<span class="tag view">閲覧者</span>なら見るだけです。</p>
+      <div class="note ok"><span class="t">入力した記録は自動でみんなに届きます</span>
+        点数を記録すると、1秒ほどで保管場所に送られます。届いたかどうかは、その日の画面の右上に「送信済み ✓」と出ます。</div>
+      <div class="note"><span class="t">入力用リンクは人に渡さないでください</span>
+        入力用リンクを持っている人は誰でも記録を書き換えられます。見てもらうだけなら、幹事に「見るだけのリンク」をもらってください。</div>
+    </div>
+    <div><div class="shot"><img src="images/home.jpg"></div><div class="cap">トップ画面。名前の横に立場が出る</div></div>
+  </div>
+</section>
+
+<!-- 2 -->
+<section>
+  <div class="chapter"><span class="no">2</span><h2>アプリを開く・ホーム画面に追加する</h2></div>
+  <p class="lead">インストールは要りません。リンクを開くとそのまま使えます。毎回すぐ開けるように、ホーム画面に追加しておくのがおすすめです。</p>
+
+  <div class="step solo">
+    <div>
+      <h3><span class="n">1</span>受け取ったリンクを開く</h3>
+      <p>LINEなどで受け取ったリンクをタップします。LINEの中で開いた場合は、右下（または右上）のメニューから<b>「ブラウザで開く」</b>を選んで、iPhoneならSafari、AndroidならChromeで開き直してください。</p>
+    </div>
+  </div>
+
+  <div class="step solo">
+    <div>
+      <h3><span class="n">2</span>ホーム画面に追加する</h3>
+      <ul>
+        <li><b>iPhone（Safari）</b>：画面下の共有ボタン <span class="key">□↑</span> → <span class="key">ホーム画面に追加</span> → <span class="key">追加</span></li>
+        <li><b>Android（Chrome）</b>：右上の <span class="key">⋮</span> → <span class="key">ホーム画面に追加</span></li>
+      </ul>
+      <p>ホーム画面に「麻雀成績」のアイコンができます。次からはこのアイコンから開いてください。</p>
+      <div class="note"><span class="t">リンクを開いた画面のまま追加してください</span>
+        ホーム画面のアイコンは、追加したときに開いていたページを覚えます。いったん別のページに移ってから追加すると、共有された記録が出ないことがあります。そのときはリンクを開き直してから追加し直してください。</div>
+      <div class="note ok"><span class="t">Safariとホーム画面のアイコンは別のアプリ扱いです</span>
+        どちらで開いても、記録は保管場所から読み込まれるので同じ内容が出ます。ふだんはホーム画面のアイコンだけを使うと迷いません。</div>
+      <p style="color:var(--ink2);font-size:9.5pt">この説明書は、アプリのトップ画面の「使い方ガイド」からも開けます。</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 -->
+<section>
+  <div class="chapter"><span class="no">3</span><h2>成績を見る</h2></div>
+  <p class="lead">コミュニティを開くと、上に「成績・記録・設定」のタブが並びます（見るだけの人は「成績・記録」の2つ）。</p>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">1</span>成績タブ ― 通算の成績</h3>
+      <p>いちばん上のグラフは、日ごとの収支の積み上がりです。その下に、収支の多い順に1人ずつのカードが並びます。</p>
+      <ul>
+        <li>円グラフ：1着〜4着を取った割合</li>
+        <li>平均着順・連対率（2着以内に入った割合）</li>
+        <li>いちばん下の行：成績（ポイント）と、チップ・祝儀などの内訳</li>
+      </ul>
+      <p>カードをタップすると、その人の詳しいデータ（席ごとの成績、自己ベスト、相手ごとの成績など）が見られます。</p>
+    </div>
+    <div><div class="shot"><img src="images/stats.jpg"></div><div class="cap">成績タブ</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">2</span>記録タブ ― 日ごとの記録</h3>
+      <p>打った日が新しい順に並びます。日付をタップすると、その日の収支と半荘ごとの結果が見られます。</p>
+      <p>その日の画面にはタブが3つあります。</p>
+      <ul>
+        <li><b>成績</b>：その日の収支と、半荘ごとの着順・ポイント</li>
+        <li><b>精算</b>：チップ・祝儀の入力（入力用リンクの人だけ）</li>
+        <li><b>データ</b>：その日の1人ずつの内訳と、その日のルール</li>
+      </ul>
+    </div>
+    <div><div class="shot"><img src="images/records_top.jpg"></div><div class="cap">記録タブ</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">3</span>見るだけの人：最新にする</h3>
+      <p>開いているあいだは1分ごとに自動で読み直します。すぐに最新にしたいときは、上の<span class="key">今すぐ読み込む</span>を押してください。</p>
+      <p>ほかのアプリから戻ってきたときも、自動で読み直します。</p>
+    </div>
+    <div><div class="shot"><img src="images/viewer.jpg"></div><div class="cap">見るだけの人の画面</div></div>
+  </div>
+</section>
+
+<!-- 4 -->
+<section>
+  <div class="chapter"><span class="no">4</span><h2>点数を入れる（入力用リンクの人）</h2></div>
+  <p class="lead">卓の横で、半荘が終わるたびに入れていきます。</p>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">1</span>今日の卓を始める</h3>
+      <p><span class="key">記録</span>タブを開いて、下の<span class="key red">＋ 今日の卓を始める</span>を押します。</p>
+      <p>今日の記録がもうあるときは「今日の卓を続ける／別の卓として始める」を聞かれます。同じ卓の続きなら<b>続ける</b>、同じ日にもう1卓立つなら<b>別の卓として始める</b>を選んでください。</p>
+      <p>日付を間違えたときは、画面上の日付をタップすると変えられます。</p>
+    </div>
+    <div><div class="shot"><img src="images/records.jpg"></div><div class="cap">記録タブ</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">2</span>今日のメンバーを選ぶ</h3>
+      <p>卓を始めると、すぐに<b>「今日のメンバー」</b>が開きます。赤いのが今日打つ人です。タップで入れたり外したりできます。</p>
+      <ul>
+        <li>5人以上選ぶと、入力画面で抜け番の人が出ます。</li>
+        <li>いつもの顔ぶれ以外の人は<span class="key">＋ ゲストを追加</span>で入れます。ゲストはその日だけの参加者で、通算の成績には入りません。</li>
+      </ul>
+      <p>選び終わったら<span class="key red">この4人で始める</span>を押します。</p>
+    </div>
+    <div><div class="shot"><img src="images/parts.jpg"></div><div class="cap">今日のメンバー</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">3</span>半荘を追加する</h3>
+      <p>その日の画面で、下の<span class="key red">＋ 半荘を追加</span>を押すと、入力画面が開きます。</p>
+      <p>この画面には、その日の収支と半荘ごとの結果が、入力するたびに増えていきます。</p>
+    </div>
+    <div><div class="shot"><img src="images/session.jpg"></div><div class="cap">その日の画面</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">4</span>終わったときの持ち点を入れる</h3>
+      <ul>
+        <li>上から<b>東・南・西・北</b>の順（起家から）です。名前の欄で、誰がどの席かを選びます。</li>
+        <li>持ち点は<b>100点単位</b>で入れます。32,700点なら <b>327</b>。欄の後ろの「00」は最初から付いています。</li>
+        <li>3人分を入れると、残り1人の点数が出ます。<span class="key">残りを入れる</span>を押せば自動で入ります。</li>
+        <li>マイナスのときは、数字の左の<span class="key">＋</span>を押して<span class="key">−</span>にします。</li>
+        <li><span class="key">席を回す</span>は、全員の席を1つずつ繰り上げます（南の人が東、東の人が北）。点数を入れる前に使ってください。</li>
+      </ul>
+    </div>
+    <div><div class="shot"><img src="images/sheet_rest.jpg"></div><div class="cap">3人分入れたところ</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">5</span>合計を確かめて記録する</h3>
+      <p>4人分の合計が合うと<b>「合計 100,000 ✓」</b>と緑色になり、下にこの半荘の着順とポイントが出ます。確かめたら<span class="key red">この半荘を記録する</span>を押します。</p>
+      <p>着順・ウマ・オカなどの計算は、すべてアプリが自動でします。</p>
+      <div class="note ok"><span class="t">合計が合わないとき</span>
+        「合計が 100,000 になりません」と赤く出ます。どこかの打ち間違いなので、点棒を数え直してください。</div>
+    </div>
+    <div><div class="shot"><img src="images/sheet_done.jpg"></div><div class="cap">合計が合ったところ</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">6</span>誰かが飛んだとき</h3>
+      <p>飛び賞ありのルールで、持ち点がマイナスの人が出ると<b>「飛ばした人」</b>の欄が出ます。飛ばした人（最後にあがった人）を選んでから記録してください。飛び賞のポイントは自動で移ります。</p>
+      <p>2人同時に飛んだときは、1人ずつ欄が出ます。ダブロンなどで自動で分けられないときは<span class="key">手動</span>を選び、あとで「精算」タブの祝儀・ペナルティに入れてください。</p>
+      <p style="color:var(--ink2);font-size:9.5pt">0点ちょうどは飛びになりません。</p>
+    </div>
+    <div><div class="shot"><img src="images/sheet_tobi.jpg"></div><div class="cap">飛んだ人がいるとき</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">7</span>届いたか確かめる</h3>
+      <p>その日の画面の右上に、送った状態が出ます。</p>
+      <ul>
+        <li><b style="color:var(--ok)">送信済み ✓</b>：みんなに届いています。</li>
+        <li><b style="color:var(--accent)">未送信</b>：まだ届いていません。電波のある所で<span class="key">今すぐ送る</span>を押してください。押さなくても、次にアプリを開いたときに自動で送ります。</li>
+      </ul>
+      <p>電波がない所で入れても、記録はスマホの中に残っています。消えることはありません。</p>
+    </div>
+    <div><div class="shot"><img src="images/session_top.jpg"></div><div class="cap">送信の状態・今日のメンバー・ルール</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">8</span>間違えたときは</h3>
+      <p>その日の画面で「半荘1 ›」などをタップすると、持ち点が出て<span class="key">修正</span>ボタンが現れます。押すと入力画面が開くので、直して記録し直してください。</p>
+      <p>入力画面のいちばん下の<span class="key">この半荘を削除</span>で消せます。消したあとも、9秒間は画面下から取り消せます。</p>
+    </div>
+    <div><div class="shot"><img src="images/session_open.jpg"></div><div class="cap">半荘1を開いたところ</div></div>
+  </div>
+
+  <div class="note ok"><span class="t">2人で入力しても大丈夫です</span>
+    同じ日に2人が入力しても、両方の記録が残ります。ただし<b>同じ半荘を2人とも入れると、2回分の記録になります</b>。その日の入力係を1人決めておくと安心です。2回入ってしまったときは、片方を削除してください。</div>
+</section>
+
+<!-- 5 -->
+<section>
+  <div class="chapter"><span class="no">5</span><h2>チップ・メンバー・その日のルール</h2></div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">1</span>終わったらチップを入れる</h3>
+      <p>その日の画面の<span class="key">精算</span>タブを開きます。</p>
+      <ul>
+        <li><b>チップ</b>：終わったときに<b>手元にある枚数</b>を入れます（増えた・減った枚数ではありません）。持ち枚数との差は自動で計算します。</li>
+        <li><b>祝儀・ペナルティ</b>：ポイントで入れます。マイナスは<span class="key">＋</span>を押して<span class="key">−</span>にします。</li>
+      </ul>
+      <p>下の「チップ合計」「祝儀・ペナルティ合計」が緑の✓になれば、数が合っています。</p>
+      <p style="color:var(--ink2);font-size:9.5pt">飛び賞は自動で入るので、ここに入れる必要はありません（名前の下に「飛び賞（自動）」と出ます）。</p>
+    </div>
+    <div><div class="shot"><img src="images/setup.jpg"></div><div class="cap">精算タブ</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">2</span>途中でメンバーが変わったとき</h3>
+      <p>遅れて来た人や、途中で抜けた人がいるときは、その日の画面の上の<b>「今日のメンバー」</b>の<span class="key">変更</span>を押します。始めるときと同じ画面が開きます。</p>
+      <p>精算タブのいちばん下の<b>参加メンバー</b>からも変えられます。</p>
+      <p style="color:var(--ink2);font-size:9.5pt">すでに打った人は外せません。</p>
+    </div>
+    <div><div class="shot"><img src="images/setup_members.jpg"></div><div class="cap">精算タブの参加メンバー</div></div>
+  </div>
+
+  <div class="step">
+    <div>
+      <h3><span class="n">3</span>その日だけルールが違うとき</h3>
+      <p>その日の画面の上の<b>「ルール」</b>の<span class="key">変更</span>を押すと、<b>その日だけ</b>のルールを変えられます。ウマ・レート・チップ・飛び賞などが変えられます（人数は変えられません）。</p>
+      <p>ほかの日の記録や、次からの卓には影響しません。</p>
+      <div class="note ok"><span class="t">いつものルールを変えたいとき</span>
+        コミュニティの<span class="key">設定</span>タブでルールを変えると、次に始める卓から新しいルールになります。</div>
+    </div>
+    <div><div class="shot"><img src="images/dayrules.jpg"></div><div class="cap">その日のルール</div></div>
+  </div>
+</section>
+
+<!-- 6 -->
+<section>
+  <div class="chapter"><span class="no">6</span><h2>困ったとき</h2></div>
+  <table class="faq">
+    <tr><td>「未送信」と出たまま</td>
+      <td>電波がない所だと送れません。電波のある所で<span class="key">今すぐ送る</span>を押すか、アプリを開き直してください。記録はスマホの中に残っているので、消えません。</td></tr>
+    <tr><td>入れたはずの記録が、ほかの人の画面に出ない</td>
+      <td>入れた人の画面が「送信済み ✓」になっているか確かめてください。見る側は<span class="key">今すぐ読み込む</span>を押すか、アプリを開き直してください。</td></tr>
+    <tr><td>同じ半荘が2つ入っている</td>
+      <td>2人が同じ半荘を入れたときに起きます。片方を開いて<span class="key">この半荘を削除</span>で消してください。</td></tr>
+    <tr><td>「通信できませんでした」と出た</td>
+      <td>電波のある所で、もう一度リンク（またはホーム画面のアイコン）を開いてください。スマホに入れた記録はそのまま残っています。</td></tr>
+    <tr><td>「共有された記録を読み込めませんでした」と出た</td>
+      <td>リンクが古いか、共有が止められている可能性があります。幹事にリンクを送り直してもらってください。</td></tr>
+    <tr><td>ホーム画面のアイコンから開くと、記録が出ない</td>
+      <td>リンクとは違うページを開いた状態で追加した可能性があります。アイコンを削除して、受け取ったリンクを開き直してから、もう一度ホーム画面に追加してください。</td></tr>
+    <tr><td>マイナスの点数が入れられない</td>
+      <td>iPhoneの数字キーにはマイナスがないので、数字の左の<span class="key">＋</span>を押して<span class="key">−</span>に切り替えます。</td></tr>
+    <tr><td>席を間違えて入れた</td>
+      <td>名前の欄をタップして、正しい人を選び直してください。記録したあとなら「修正」から直せます。</td></tr>
+  </table>
+</section>
+
+</body>
+</html>

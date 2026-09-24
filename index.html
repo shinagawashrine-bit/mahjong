@@ -250,6 +250,10 @@ input.neg{color:var(--bad);font-weight:600}
   padding:6px 13px;font-size:13px;cursor:pointer;font-family:inherit;color:var(--ink-2)}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .chiprow{display:flex;gap:7px;flex-wrap:wrap}
+/* その日の画面の上：送信の状態と、今日のメンバー */
+.sendline{font-size:12px;text-align:right;margin:-4px 2px -6px;display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.partline{display:flex;gap:8px;align-items:center;font-size:12.5px;padding:0 2px;margin-bottom:-4px}
+.partline .names{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sharebox{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:8px;
   padding:9px 11px;font-size:11px;word-break:break-all;line-height:1.5;color:var(--ink-2);
   font-family:ui-monospace,monospace}
@@ -398,6 +402,7 @@ try {
 }
 
 function save(){
+  if (typeof stamp === "function") stamp();
   const text = JSON.stringify(Object.assign({}, DB, {savedAt: new Date().toISOString()}));
   SAVED_AT = new Date().toISOString();
   writeStore(sessionStorage, text);
@@ -507,54 +512,231 @@ const shareLink = (c, edit) => {
   return location.origin + location.pathname + "?" + (edit ? "e" : "s") + "=" + tail;
 };
 
-let SHARE_STATE = "";          // 送信の状態を画面に出すため
-const lastPushed = {};
+let SHARE_STATE = "";          // 読み込みボタンの表示（読み込み中など）
+const SEND = {};               // コミュニティごとの送信の状態。"sending" / "failed" / なし
 
-// 送る中身。at は毎回変わるので、送る必要があるかの判定からは外す
+/* ========== 共有の突き合わせ ==========
+   共有は「コミュニティまるごと上書き」ではなく、中身ごとに新しい方を残す。
+   2人が同じ日に入力しても、両方の半荘が残るようにするため。
+   ・日（session）は s.at、半荘は g.at、メンバーは m.at、名前・ルール・引き継ぎは c.metaAt
+   ・消したものは c.tomb に「s:日 / g:半荘 / m:メンバー」→ 消した時刻 で残す
+   時刻は save() のたびに前回との差分を見て自動で付ける（操作ごとに書き足さずに済むように）。
+   受け取った側の日のIDには "shared_合言葉_" の印が付く。突き合わせ・消した記録・guestOf は印を外した形で持つ。 */
+const shareTag = c => "shared_" + ((c.share && c.share.key) || "") + "_";
+const canonId  = (c, id) => (c && c.share && id && id.startsWith(shareTag(c))) ? id.slice(shareTag(c).length) : id;
+const localId  = (c, id) => { const b = canonId(c, id); return c.sharedFrom ? shareTag(c) + b : b; };
+const atOf = o => (o && o.at) || "";
+
+// 半荘にIDを付ける。古い記録は端末が違っても同じIDになるよう、日と順番から作る
+function ensureGameIds(){
+  DB.sessions.forEach(s=>{
+    const c = DB.communities.find(x=>x.id===s.communityId);
+    s.games.forEach((g,i)=>{ if (!g.id){ g.id = canonId(c, s.id) + "_L" + i; g.c = i; } });
+  });
+}
+
+// 前回の save からの差分を見るための控え
+let SNAP = null;
+const noAt = o => JSON.stringify(Object.assign({}, o, {at:undefined}));
+const sessMeta = s => JSON.stringify(Object.assign({}, s, {at:undefined, games:undefined}));
+function takeSnap(){
+  const m = new Map();
+  DB.communities.forEach(c=>{
+    m.set("c:"+c.id, {v:JSON.stringify([c.name, c.rules, c.carry||{}])});
+    c.members.forEach(x=> m.set("m:"+c.id+":"+x.id, {cid:c.id, id:x.id, k:"m", v:noAt(x)}));
+  });
+  DB.sessions.forEach(s=>{
+    m.set("s:"+s.id, {cid:s.communityId, id:s.id, k:"s", v:sessMeta(s)});
+    s.games.forEach(g=> m.set("g:"+s.id+":"+g.id, {cid:s.communityId, id:g.id, k:"g", v:noAt(g)}));
+  });
+  return m;
+}
+function stamp(){
+  ensureGameIds();
+  if (SNAP){
+    const now = new Date().toISOString();
+    const cur = takeSnap();
+    DB.communities.forEach(c=>{
+      const a = SNAP.get("c:"+c.id);
+      if (a && a.v !== cur.get("c:"+c.id).v) c.metaAt = now;
+      c.members.forEach(x=>{ const p = SNAP.get("m:"+c.id+":"+x.id); if (!p || p.v !== noAt(x)) x.at = now; });
+    });
+    DB.sessions.forEach(s=>{
+      const p = SNAP.get("s:"+s.id); if (!p || p.v !== sessMeta(s)) s.at = now;
+      s.games.forEach(g=>{ const q = SNAP.get("g:"+s.id+":"+g.id); if (!q || q.v !== noAt(g)) g.at = now; });
+    });
+    SNAP.forEach((p,key)=>{          // 消えたものは消した記録を残す
+      if (!p.k || cur.has(key)) return;
+      const c = DB.communities.find(x=>x.id===p.cid);
+      if (!c) return;
+      c.tomb = c.tomb || {};
+      c.tomb[p.k + ":" + canonId(c, p.id)] = now;
+    });
+  }
+  SNAP = takeSnap();
+}
+
+// 保管庫から来た日を、この端末の形（IDの印・半荘のID）にそろえる
+function normSession(c, s, keepId){
+  const games = (s.games||[]).map((g,i)=> g.id ? g
+    : Object.assign({}, g, {id: canonId(c, s.id) + "_L" + i, c: i}));
+  return Object.assign({}, s, {id: keepId || localId(c, s.id), communityId: c.id, games});
+}
+const normMember = (c, m) => m.guestOf ? Object.assign({}, m, {guestOf: canonId(c, m.guestOf)}) : m;
+
+// 閲覧者：保管庫の中身をそのまま写す
+function replaceShared(c, d){
+  c.name = d.name; c.rules = d.rules; c.carry = d.carry || {};
+  c.metaAt = d.metaAt; c.tomb = d.tomb || {};
+  c.members = (d.members||[]).map(m=>normMember(c, m));
+  DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id)
+    .concat((d.sessions||[]).map(s=>normSession(c, s)));
+}
+
+// 入力する側：手元と保管庫を突き合わせて、新しい方を残す
+function mergeShared(c, d){
+  const tomb = Object.assign({}, d.tomb || {});
+  Object.entries(c.tomb || {}).forEach(([k,v])=>{ if (!tomb[k] || tomb[k] < v) tomb[k] = v; });
+  const dead = (k, at) => !!tomb[k] && tomb[k] >= (at || "");
+  c.tomb = tomb;
+
+  if ((d.metaAt||"") > (c.metaAt||"")){
+    c.name = d.name; c.rules = d.rules; c.carry = d.carry || {}; c.metaAt = d.metaAt;
+  }
+
+  const mem = new Map(c.members.map(m=>[m.id, normMember(c, m)]));
+  (d.members||[]).forEach(r0=>{
+    const r = normMember(c, r0), l = mem.get(r.id);
+    if (!l || atOf(r) > atOf(l)) mem.set(r.id, r);
+  });
+  c.members = [...mem.values()].filter(m=>!dead("m:"+m.id, m.at));
+
+  const out = new Map();
+  DB.sessions.filter(s=>s.communityId===c.id).forEach(s=>out.set(canonId(c, s.id), s));
+  (d.sessions||[]).forEach(r0=>{
+    const k = canonId(c, r0.id), l = out.get(k);
+    const r = normSession(c, r0, l && l.id);
+    if (!l){ out.set(k, r); return; }
+    const games = new Map(l.games.map(g=>[g.id, g]));
+    r.games.forEach(g=>{ const x = games.get(g.id); if (!x || atOf(g) > atOf(x)) games.set(g.id, g); });
+    const base = atOf(r) > atOf(l) ? r : l;
+    out.set(k, Object.assign({}, base, {id:l.id, communityId:c.id, games:[...games.values()]}));
+  });
+  const merged = [];
+  out.forEach((s,k)=>{
+    s.games = s.games.filter(g=>!dead("g:"+g.id, g.at)).sort((a,b)=>(a.c||0)-(b.c||0));
+    const newest = s.games.reduce((a,g)=> atOf(g) > a ? atOf(g) : a, atOf(s));
+    if (!dead("s:"+k, newest)) merged.push(s);
+  });
+  DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id).concat(merged);
+}
+
+/* 送る中身と、その「指紋」。指紋が前に送ったものと同じなら送らない（未送信の判定にも使う）。
+   キーの並び順やIDの印に左右されないよう、形をそろえてから作る。 */
 function shareBody(c){
   return {
     name: c.name, rules: c.rules, carry: c.carry || {}, members: c.members,
+    metaAt: c.metaAt || "", tomb: c.tomb || {},
     sessions: DB.sessions.filter(s=>s.communityId===c.id)
   };
 }
 function sharePayload(c){
   return Object.assign(shareBody(c), {at: new Date().toISOString()});
 }
+function stable(v){
+  if (Array.isArray(v)) return "[" + v.map(stable).join(",") + "]";
+  if (v && typeof v === "object")
+    return "{" + Object.keys(v).filter(k=>v[k] !== undefined).sort()
+      .map(k=>JSON.stringify(k) + ":" + stable(v[k])).join(",") + "}";
+  return JSON.stringify(v === undefined ? null : v);
+}
+function hash(str){
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++){
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1>>>16), 2246822507) ^ Math.imul(h2 ^ (h2>>>13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2>>>16), 2246822507) ^ Math.imul(h1 ^ (h1>>>13), 3266489909);
+  return (4294967296 * (2097151 & h2) + (h1>>>0)).toString(36);
+}
+function bodySig(c, b){
+  return hash(stable({
+    name:b.name, rules:b.rules, carry:b.carry || {}, metaAt:b.metaAt || "", tomb:b.tomb || {},
+    members:(b.members||[]).map(m=>normMember(c, m)),
+    sessions:(b.sessions||[]).map(s=>Object.assign({}, s, {id:canonId(c, s.id), communityId:undefined}))
+      .sort((x,y)=> x.id < y.id ? -1 : 1)
+  }));
+}
+const isUnsent = c => !!(c && c.share && !c.readOnly) && bodySig(c, shareBody(c)) !== c.sentSig;
 
+/* 送る。先に保管庫を読んで突き合わせてから送るので、ほかの人の入力を消さない。 */
 function pushShare(c, quiet){
+  if (!shareScriptId(c) || !c.share || c.readOnly) return Promise.resolve();
+  if (!isUnsent(c)) return Promise.resolve();
+  if (SEND[c.id] === "sending"){ c.sendAgain = true; return Promise.resolve(); }
+  SEND[c.id] = "sending"; showSendStatus();
+  return pullShare(c).then(ch=>{
+    if (ch === null){ SEND[c.id] = "failed"; showSendStatus(); return; }   // 通信できない
+    if (ch){ render(); if (!quiet) toast("ほかの人が入れた記録と合わせました"); }
+    if (!isUnsent(c)){ SEND[c.id] = undefined; showSendStatus(); return; }
+    return sendShare(c);
+  });
+}
+function sendShare(c){
   const id = shareScriptId(c);
-  if (!id || !c.share || c.readOnly) return Promise.resolve();
-  const body = JSON.stringify(shareBody(c));
-  if (lastPushed[c.id] === body) return Promise.resolve();
   const payload = sharePayload(c);
-  const text = body;
-  if (!quiet){ SHARE_STATE = "送信中"; render(); }
-  c.syncAt = payload.at;
+  const sig = bodySig(c, payload);
+  const body = JSON.stringify({k: c.share.key, data: payload});
+  const done = ()=>{
+    c.syncAt = payload.at; c.sentAt = payload.at; c.sentSig = sig;
+    SEND[c.id] = undefined; save(); showSendStatus();
+    if (c.sendAgain){ c.sendAgain = false; pushShare(c, true); }
+  };
+  const fail = ()=>{ SEND[c.id] = "failed"; showSendStatus(); };
   return fetch(scriptUrl(id), {
     method: "POST",
     headers: {"Content-Type": "text/plain;charset=utf-8"},   // 事前確認を挟ませない
-    body: JSON.stringify({k: c.share.key, data: payload})
+    body
   }).then(r=>{
     // 書き込みが通っても、返ってくるのが JSON とは限らない（転送先のページが返る）。
     // 通信が成立していれば送れたものとして扱う。
     if (!r.ok) throw new Error("http " + r.status);
-    lastPushed[c.id] = text; SHARE_STATE = "";
-    if (!quiet) render();
+    done();
   }).catch(()=>{
     // 返事を読めない環境でも、書き込み自体は通ることがあるので投げ直す
     return fetch(scriptUrl(id), {
       method: "POST", mode: "no-cors",
-      headers: {"Content-Type": "text/plain;charset=utf-8"},
-      body: JSON.stringify({k: c.share.key, data: payload})
-    }).then(()=>{ lastPushed[c.id] = text; SHARE_STATE = ""; if (!quiet) render(); })
-      .catch(()=>{ SHARE_STATE = "送信できませんでした"; if (!quiet) render(); });
+      headers: {"Content-Type": "text/plain;charset=utf-8"}, body
+    }).then(done).catch(fail);
   });
 }
 
-// 記録が変わったら、共有中のコミュニティにまとめて送る
+/* 送信の状態。入力した人が「届いたか」を見られるように、その日の画面などに出す。
+   送るたびに画面全体を描き直すと入力中の欄が外れるので、この表示だけを差し替える。 */
+function sendStatus(c){
+  if (!c || !c.share || c.readOnly) return "";
+  const st = SEND[c.id];
+  if (st === "sending") return `<span class="muted">送信中…</span>`;
+  if (isUnsent(c)) return `<span style="color:var(--bad);font-weight:600">未送信${
+      st === "failed" ? "（通信できませんでした）" : ""}</span>
+    <button class="btn ghost sm" data-send-now="${c.id}" style="padding:1px 8px;font-size:11px">今すぐ送る</button>`;
+  return `<span style="color:var(--good)">送信済み ✓${c.sentAt ? " " +
+    new Date(c.sentAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}</span>`;
+}
+function showSendStatus(){
+  document.querySelectorAll("[data-send-status]").forEach(el=>{
+    el.innerHTML = sendStatus(community(el.dataset.sendStatus));
+  });
+}
+
+// 記録が変わったら、共有中のコミュニティにまとめて送る。
+// 編集者の端末は保管庫につないでいない（DB.syncId がない）ので、ここで弾かないこと。
+// 送り先は各コミュニティの c.share が持っている。
 let pushTimer = null;
 function queueShare(){
-  if (!DB.syncId) return;
+  if (!DB.communities.some(c=>c.share && !c.readOnly && shareScriptId(c))) return;
+  showSendStatus();
   clearTimeout(pushTimer);
   pushTimer = setTimeout(()=>{
     DB.communities.filter(c=>c.share && !c.readOnly).forEach(c=>pushShare(c, true));
@@ -597,7 +779,8 @@ function pullBackup(){
     .then(r=>r.json()).then(d=>(d && !d.error && d.communities) ? d : null).catch(()=>null);
 }
 
-/* 預けてある写しを読み直す。相手が更新していれば手元も追いつく。 */
+/* 預けてある写しを読み直す。閲覧者はそのまま写し、入力する側は突き合わせる。
+   返り値：変わった true／変わらない false／通信できなかった null */
 function pullShare(c){
   const id = shareScriptId(c);
   if (!id || !c.share) return Promise.resolve(false);
@@ -606,45 +789,46 @@ function pullShare(c){
     .then(d=>{
       if (!d || d.error || !d.name) return false;
       if (c.syncAt && d.at && d.at <= c.syncAt) return false;   // 変わっていない
-      c.name = d.name; c.members = d.members; c.rules = d.rules;
-      c.carry = d.carry || {}; c.syncAt = d.at;
-      const tag = "shared_" + c.share.key + "_";
-      DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id)
-        .concat((d.sessions||[]).map(s=>Object.assign({}, s, {communityId:c.id,
-          id: c.sharedFrom
-            ? (s.id.startsWith(tag) ? s.id : tag + s.id)   // 受け取り側は印を付ける
-            : s.id.replace(tag, "")})));                    // 送り主側は印を外して元に戻す
-      lastPushed[c.id] = JSON.stringify(shareBody(c));   // 読んだ直後に送り返さない
-      save();
-      return true;
-    }).catch(()=>false);
+      const before = bodySig(c, shareBody(c));
+      if (c.readOnly) replaceShared(c, d); else mergeShared(c, d);
+      c.syncAt = d.at;
+      const after = bodySig(c, shareBody(c));
+      if (after === bodySig(c, d)) c.sentSig = after;   // 保管庫と同じ＝送るものはない
+      SNAP = null; save();                              // 読んだものに自分の時刻を付けない
+      return after !== before;
+    }).catch(()=>null);
 }
 function refreshShared(all){
   const list = DB.communities.filter(c=>c.share && (all || c.readOnly));
   if (!list.length) return;
-  Promise.all(list.map(pullShare)).then(r=>{ if (r.some(Boolean)) render(); });
+  Promise.all(list.map(pullShare)).then(r=>{ if (r.some(x=>x === true)) render(); });
 }
 document.addEventListener("visibilitychange", ()=>{
   if (!document.hidden) refreshShared(true);          // 戻ってきたら読み直す
 });
 setInterval(()=>{ if (!document.hidden) refreshShared(false); }, 60000);  // 閲覧中は1分おき
 
-/* 共有リンクで開かれたときは、預けてある写しを読んで並べる */
-let SHARED_LOADING = false, SHARED_ERROR = "";
+/* 共有リンクで開かれたときは、預けてある写しを読んで並べる。
+   入力用リンクで、手元に前からの記録があるときは突き合わせる（送れていなかった分を消さないため）。 */
+let SHARED_LOADING = false, SHARED_ERROR = "", SHARED_OFFLINE = false;
 function applyShared(id, key, d, canEdit){
   const cid = "shared_" + key;
-  const c = {id:cid, name:d.name, members:d.members, rules:d.rules,
-             carry:d.carry || {}, share:{key, id}, sharedFrom:true,
-             readOnly:!canEdit, sharedAt:d.at, syncAt:d.at};
-  DB.communities = DB.communities.filter(x=>x.id!==cid).concat([c]);
-  const tag = cid + "_";
-  DB.sessions = DB.sessions.filter(s=>s.communityId!==cid).concat(
-    (d.sessions||[]).map(s=>Object.assign({}, s,
-      {communityId:cid, id: s.id.startsWith(tag) ? s.id : tag + s.id})));
-  lastPushed[cid] = JSON.stringify(shareBody(c));
-  save();
+  let c = community(cid);
+  if (c && canEdit && !c.readOnly){
+    c.share = {key, id};
+    mergeShared(c, d);
+  } else {
+    c = {id:cid, share:{key, id}, sharedFrom:true, members:[]};
+    DB.communities = DB.communities.filter(x=>x.id!==cid).concat([c]);
+    replaceShared(c, d);
+  }
+  c.sharedFrom = true; c.readOnly = !canEdit; c.sharedAt = d.at; c.syncAt = d.at;
+  const s = bodySig(c, shareBody(c));
+  if (s === bodySig(c, d)) c.sentSig = s;
+  SNAP = null; save();
   return cid;
 }
+
 /* ?setup=保管庫ID を開くと、その端末を保管庫につなぐ。
    URLを手で貼らずに済ませるための一度きりの入口。 */
 function loadSetup(){
@@ -679,9 +863,11 @@ function loadShared(){
       SHARED_LOADING = false;
       go({name:"community", id:cid, tab:"stats"});
     })
-    .catch(()=>{
+    .catch(err=>{
       SHARED_LOADING = false;
-      SHARED_ERROR = "共有された記録を読み込めませんでした";
+      // 保管庫に届かなかった（電波など）のか、届いたが見つからなかったのかで案内を分ける
+      SHARED_OFFLINE = !(err && /notfound|empty|broken|nokey/.test(err.message));
+      SHARED_ERROR = SHARED_OFFLINE ? "通信できませんでした" : "共有された記録を読み込めませんでした";
       render();
     });
 }
@@ -1032,8 +1218,9 @@ function viewHome(){
       ${SHARED_LOADING ? `<div class="card card-p" style="text-align:center">共有された記録を読み込んでいます…</div>` : ""}
       ${SHARED_ERROR ? `<div class="card card-p" style="border-color:var(--accent);background:var(--accent-soft)">
         <strong style="color:var(--accent)">${esc(SHARED_ERROR)}</strong>
-        <div style="font-size:13px;margin-top:4px">リンクが古いか、共有が止められている可能性があります。
-          送った人に確認してください。</div></div>` : ""}
+        <div style="font-size:13px;margin-top:4px">${SHARED_OFFLINE
+          ? "電波のある所で、もう一度リンクを開いてください。この端末に入れた記録はそのまま残っています。"
+          : "リンクが古いか、共有が止められている可能性があります。送った人に確認してください。"}</div></div>` : ""}
       ${(isIOS && !isStandalone) ? `<div class="card card-p"
         style="border-color:var(--accent);background:var(--accent-soft)">
         <strong style="color:var(--accent)">ホーム画面に追加して使ってください</strong>
@@ -1075,6 +1262,7 @@ function viewHome(){
       </div>
       ${DB.communities.some(c=>c.members.some(m=>m.isMe)) ? "" : DB.communities.length ?
         `<p class="muted" style="text-align:center">メンバーの1人を「自分」に設定すると、ここに自分の成績が出ます</p>` : ""}
+      <p style="text-align:center;margin:4px 0 0"><a class="btn ghost sm" href="guide/" target="_blank" rel="noopener">使い方ガイド</a></p>
     </main>`;
 }
 
@@ -1094,10 +1282,12 @@ function viewCommunity(){
         `<button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>`}
 
     </div>
-    ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧者）" : "共有された記録です（編集者）"}${
+    ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧者）" : "共有された記録です（編集者）"}
+        · <a href="guide/" target="_blank" rel="noopener" style="color:inherit">使い方</a>${
         c.syncAt ? ` · ${new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}
         <button class="btn ghost sm" data-refresh-share
-          style="padding:1px 8px;font-size:11px;margin-left:6px">${SHARE_STATE || "今すぐ読み込む"}</button></p>` : ""}
+          style="padding:1px 8px;font-size:11px;margin-left:6px">${SHARE_STATE || "今すぐ読み込む"}</button>${
+        c.readOnly ? "" : `<br><span data-send-status="${c.id}" style="font-size:11.5px">${sendStatus(c)}</span>`}</p>` : ""}
     ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
 }
 
@@ -1305,30 +1495,21 @@ function tabLog(c){
     ${c.readOnly ? "" : `<button class="btn primary fab" data-new-session>＋ 今日の卓を始める</button>`}`;
 }
 
-function tabSettings(c){
-  const r = c.rules;
+/* ルールの入力欄。設定タブ（コミュニティの既定）と、その日だけのルールのシートで同じものを使う。
+   day=true のときは人数を出さない。 */
+// ウマの呼び名。決まった形ならその名前、そうでなければ数字を並べる
+function umaLabel(r){
+  const p = (UMA_PRESETS[r.playerCount]||[]).find(p=>JSON.stringify(p.uma)===JSON.stringify(r.uma));
+  return p ? (p.label.startsWith("ウマ") ? p.label : "ウマ " + p.label) : "ウマ " + r.uma.map(signed).join("/");
+}
+function rulesFields(r, day){
   const presets = UMA_PRESETS[r.playerCount] || UMA_PRESETS[4];
-  return `<main class="stack narrow">
-    <div class="card card-p stack">
-      <h2 class="sec">メンバー</h2>
-      <div class="stack" style="gap:8px">
-        ${regulars(c).map(m=>`<div class="row">
-          <input value="${esc(m.name)}" data-member-name="${m.id}" style="flex:1">
-          <button class="chip" aria-pressed="${!!m.isMe}" data-set-me="${m.id}">自分</button>
-          <button class="btn ghost sm danger" data-del-member="${m.id}">削除</button>
-        </div>`).join("")}
-      </div>
-      <button class="btn sm" data-add-member>＋ メンバーを追加</button>
-      <p class="muted">記録に使われているメンバーは削除できません。</p>
-    </div>
-
-    <div class="card card-p stack">
-      <h2 class="sec">ルール</h2>
-      <label class="fld">人数
+  return `
+      ${day ? "" : `<label class="fld">人数
         <select data-rule="playerCount">
           <option value="4" ${r.playerCount===4?"selected":""}>四麻</option>
           <option value="3" ${r.playerCount===3?"selected":""}>三麻</option>
-        </select></label>
+        </select></label>`}
       <div class="grid2">
         <label class="fld">配給原点
           <input inputmode="numeric" value="${r.startPoints}" data-rule="startPoints"></label>
@@ -1351,10 +1532,10 @@ function tabSettings(c){
         <label class="fld">レート（1ポイント＝円）
           <input inputmode="numeric" value="${r.rate}" data-rule="rate"></label>
         <label class="fld">チップ（1枚＝ポイント）
-          <input inputmode="numeric" value="${chipPoints(c.rules)}" data-rule="chipPoints"></label>
+          <input inputmode="numeric" value="${chipPoints(r)}" data-rule="chipPoints"></label>
       </div>
       <label class="fld">チップの枚数
-        <input inputmode="numeric" value="${chipStart(c.rules)}" data-rule="chipStart"></label>
+        <input inputmode="numeric" value="${chipStart(r)}" data-rule="chipStart"></label>
       <div>
         <div style="font-size:12.5px;color:var(--ink-2);font-weight:500;margin-bottom:6px">飛び賞</div>
         <div class="row" style="gap:10px;align-items:center">
@@ -1373,6 +1554,28 @@ function tabSettings(c){
           <option value="seat" ${(r.tieBreak||"seat")==="seat"?"selected":""}>上家優先（起家に近い人が上位）</option>
           <option value="split" ${r.tieBreak==="split"?"selected":""}>順位点を山分け</option>
         </select></label>
+`;
+}
+
+function tabSettings(c){
+  const r = c.rules;
+  return `<main class="stack narrow">
+    <div class="card card-p stack">
+      <h2 class="sec">メンバー</h2>
+      <div class="stack" style="gap:8px">
+        ${regulars(c).map(m=>`<div class="row">
+          <input value="${esc(m.name)}" data-member-name="${m.id}" style="flex:1">
+          <button class="chip" aria-pressed="${!!m.isMe}" data-set-me="${m.id}">自分</button>
+          <button class="btn ghost sm danger" data-del-member="${m.id}">削除</button>
+        </div>`).join("")}
+      </div>
+      <button class="btn sm" data-add-member>＋ メンバーを追加</button>
+      <p class="muted">記録に使われているメンバーは削除できません。</p>
+    </div>
+
+    <div class="card card-p stack">
+      <h2 class="sec">ルール</h2>
+      ${rulesFields(r, false)}
       <button class="btn sm" data-apply-rules-to-past>過去の記録にも今のルールを適用</button>
     </div>
 
@@ -1414,12 +1617,13 @@ function tabSettings(c){
           </div>
           <p class="muted" style="margin:8px 0 0;font-size:11.5px">
             編集者のリンクは、代わりに記録してもらう人にだけ渡してください。
-            2人が同時に入力すると、あとから送られた方で上書きされます。</p>
+            2人が入力しても両方の記録が残ります（同じ半荘を2人で入れると2回分になります）。</p>
           <div class="row" style="gap:8px;margin-top:10px">
             <button class="btn sm" data-push-share>データを保存</button>
             <button class="btn sm" data-refresh-share>データを更新</button>
             <button class="btn ghost sm danger" data-stop-share>共有をやめる</button>
           </div>
+          <p style="margin:6px 0 0;font-size:11.5px" data-send-status="${c.id}">${sendStatus(c)}</p>
           ${SHARE_STATE ? `<p class="muted" style="margin:6px 0 0;font-size:11.5px">${esc(SHARE_STATE)}</p>` : ""}`
         : `<button class="btn sm" data-start-share>共有をはじめる</button>
            <p class="muted" style="margin:6px 0 0;font-size:11.5px">
@@ -1556,6 +1760,41 @@ function viewMember(){
     </main>`;
 }
 
+/* 参加メンバーの選択。ゲストはその日の人だけを出す（日のIDは印を外して比べる） */
+function partChips(c, s){
+  return `<div class="chiprow">${c.members
+      .filter(m=>!m.guestOf || canonId(c, m.guestOf) === canonId(c, s.id))
+      .map(m=>`<button class="chip" aria-pressed="${s.participantIds.includes(m.id)}"
+        data-toggle-part="${m.id}">${esc(m.name)}${
+        m.guestOf ? '<span class="guesttag">ゲスト</span>' : ""}</button>`).join("")}</div>
+    <button class="btn sm" data-add-guest>＋ ゲストを追加</button>`;
+}
+function sheetDayRules(){
+  const s = DB.sessions.find(x=>x.id===V.id);
+  return `<div class="sheet-hd"><h3>${fmtDate(s.date)}のルール</h3>
+      <button class="btn primary sm" data-close-sheet>閉じる</button></div>
+    <div class="sheet-body stack">
+      <p style="margin:0;color:var(--ink-2)">この日の記録だけに効きます。ほかの日と、次からの卓は変わりません。</p>
+      ${rulesFields(s.rules, true)}
+      <button class="btn wide primary" data-close-sheet>閉じる</button>
+    </div>`;
+}
+function sheetParts(){
+  const s = DB.sessions.find(x=>x.id===V.id);
+  const c = community(s.communityId);
+  const n = rulesOf(s).playerCount;
+  const k = s.participantIds.length;
+  return `<div class="sheet-hd"><h3>今日のメンバー</h3>
+      <button class="btn primary sm" data-close-sheet ${k < n ? "disabled" : ""}>決定</button></div>
+    <div class="sheet-body stack">
+      <p style="margin:0;color:var(--ink-2)">今日打つ人を選んでください（赤が参加）。${
+        k > n ? `${k}人なので、半荘ごとに抜け番が出ます。` : ""}</p>
+      ${partChips(c, s)}
+      ${k < n ? `<p class="muted" style="margin:0">あと${n-k}人選んでください</p>` : ""}
+      <button class="btn wide primary" data-close-sheet ${k < n ? "disabled style='opacity:.5'" : ""}>この${k}人で始める</button>
+    </div>`;
+}
+
 /* ---- session ---- */
 function viewSession(){
   const s = DB.sessions.find(x=>x.id===V.id);
@@ -1614,6 +1853,14 @@ function viewSession(){
           ? new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) + "時点"
           : "共有中"}</div>
       </div>` : ""}
+      ${c.share && !c.readOnly ? `<div class="sendline" data-send-status="${c.id}">${sendStatus(c)}</div>` : ""}
+      ${c.readOnly ? "" : `<div class="partline"><span class="muted">今日のメンバー</span>
+        <span class="names">${parts.map(p=>esc(memberName(c,p))).join("・")}</span>
+        <button class="btn ghost sm" data-open-parts style="padding:1px 10px;font-size:11.5px">変更</button></div>
+      <div class="partline"><span class="muted">ルール</span>
+        <span class="names">${tableName(R.playerCount)}・${umaLabel(R)}・${R.rate}円${
+          tobiOn(R) ? `・飛び ${tobiPoints(R)}` : ""}</span>
+        <button class="btn ghost sm" data-open-day-rules style="padding:1px 10px;font-size:11.5px">変更</button></div>`}
       <div class="${s.games.length ? "cards" : ""}">
         <div class="card"><div class="card-p" style="padding-bottom:6px"><p class="eyebrow">今日の収支</p></div>
           <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
@@ -1680,12 +1927,7 @@ function viewSession(){
 
       <div class="card card-p stack">
         <h2 class="sec">参加メンバー</h2>
-        <div class="chiprow">${c.members
-          .filter(m=>!m.guestOf || m.guestOf === s.id)
-          .map(m=>`<button class="chip" aria-pressed="${parts.includes(m.id)}"
-            data-toggle-part="${m.id}">${esc(m.name)}${
-            m.guestOf ? '<span class="guesttag">ゲスト</span>' : ""}</button>`).join("")}</div>
-        <button class="btn sm" data-add-guest>＋ ゲストを追加</button>
+        ${partChips(c, s)}
       </div>
 
       <div class="card card-p">
@@ -1764,6 +2006,7 @@ function viewSession(){
           レート ${R.rate}円・チップ1枚 ${chipPoints(R)}ポイント・持ち枚数 ${chipStart(R)}枚<br>
           飛び賞 ${tobiOn(R) ? `${tobiPoints(R)}ポイント（飛ばした人へ）` : "なし"}
         </div>
+        ${c.readOnly ? "" : `<button class="btn sm" data-open-day-rules style="margin-top:8px">この日のルールを変える</button>`}
       </div>
     </main>`;
   }
@@ -1782,7 +2025,9 @@ function renderSheet(){
     sheet.kind === "text"    ? sheetText()    :
     sheet.kind === "confirm" ? sheetConfirm() :
     sheet.kind === "choice"  ? sheetChoice()  :
-    sheet.kind === "data"    ? sheetData()    : sheetGame();
+    sheet.kind === "data"    ? sheetData()    :
+    sheet.kind === "parts"   ? sheetParts()   :
+    sheet.kind === "dayRules"? sheetDayRules(): sheetGame();
   document.body.append(scrim, el);
   fitSheetAboveKeyboard();
   if (sheet.kind === "game" || !sheet.kind){
@@ -2045,11 +2290,18 @@ function openGameSheet(index){
     draft = {seats, points:Array(n).fill(null), signs:Array(n).fill(1)};
   } else {
     const g = s.games[index];
-    draft = {seats:g.seats.slice(), points:g.points.slice(),
+    draft = {id:g.id, seats:g.seats.slice(), points:g.points.slice(),
              signs:g.points.map(p=> p < 0 ? -1 : 1), tobiBy:Object.assign({}, g.tobiBy)};
   }
   sheet = {kind:"game", index, draft, focusFirst:true};
   render();
+  // 入力を始める前に、ほかの人が入れた分を読んでおく（送るときに食い違わないように）
+  const c = community(s.communityId);
+  if (c.share && !c.readOnly) pullShare(c).then(ch=>{
+    if (!ch) return;
+    readDraft(); render();
+    toast("ほかの人が入れた記録を読み込みました");
+  });
 }
 
 /* 控えから元に戻す。合言葉が無い端末（機種変えなど）では合言葉を聞いてから読みにいく。 */
@@ -2089,10 +2341,16 @@ function doRestoreBackup(fresh){
         DB = Object.assign(newDB(), {communities:d2.communities, sessions:d2.sessions,
                                      syncId:d2.syncId, backupKey:keep, backupAt:d2.at});
         lastBackup = JSON.stringify(backupBody());
-        save(); go({name:"home"});
+        SNAP = null; save(); go({name:"home"});
         toast("控えから元に戻しました");
       });
   });
+}
+
+/* ルールを変える先。その日のルールのシートが開いていればその日、そうでなければコミュニティの既定 */
+function ruleTarget(){
+  if (sheet && sheet.kind === "dayRules") return DB.sessions.find(x=>x.id===V.id).rules;
+  return community(V.id).rules;
 }
 
 /* ========== events ========== */
@@ -2177,7 +2435,8 @@ document.addEventListener("click", e=>{
       : community(V.id);
     if (!c) return;
     SHARE_STATE = "読み込み中"; render();
-    return pullShare(c).then(ch=>{ SHARE_STATE = ""; render(); toast(ch ? "最新にしました" : "変わりありません"); });
+    return pullShare(c).then(ch=>{ SHARE_STATE = ""; render();
+      toast(ch === null ? "読み込めませんでした。電波を確かめてください" : ch ? "最新にしました" : "変わりありません"); });
   }
   if (d.copyShare !== undefined){
     const c = community(V.id);
@@ -2188,17 +2447,25 @@ document.addEventListener("click", e=>{
     else toast("長押しで選択してコピーしてください");
     return;
   }
+  if (d.sendNow){
+    const c = community(d.sendNow);
+    if (!c) return;
+    SEND[c.id] = undefined;
+    return pushShare(c).then(()=>{
+      if (SEND[c.id] === "failed") toast("送れませんでした。電波のある所でもう一度押してください");
+    });
+  }
   if (d.pushShare !== undefined){
     const c = community(V.id);
-    lastPushed[c.id] = null;
-    pushShare(c).then(()=>{ if (!SHARE_STATE) toast("最新の状態を送りました"); });
+    c.sentSig = null; SEND[c.id] = undefined;
+    pushShare(c).then(()=>toast(SEND[c.id] === "failed" ? "送れませんでした。電波を確かめてください" : "最新の状態を送りました"));
     return;
   }
   if (d.stopShare !== undefined){
     const c = community(V.id);
     return askConfirm("共有をやめる",
       "リンクを開いても見られなくなります。手元の記録は消えません。", "やめる", ()=>{
-        delete c.share; delete lastPushed[c.id];
+        delete c.share; delete c.sentSig; delete c.sentAt;
         save(); go({name:"community", id:c.id, tab:"settings"});
         toast("共有をやめました");
       });
@@ -2240,10 +2507,12 @@ document.addEventListener("click", e=>{
   if (d.addGuest !== undefined){
     const s = DB.sessions.find(x=>x.id===V.id);
     const c = community(s.communityId);
+    const fromParts = sheet && sheet.kind === "parts";
     return askText("ゲストを追加", "名前", "", "追加", name=>{
+      if (fromParts) setTimeout(()=>{ sheet = {kind:"parts"}; render(); }, 0);
       if (!name.trim()){ toast("名前を入れてください"); return false; }
       // guestOf を持つ人はこの日だけの参加者。通算には出てこない
-      const m = {id:uid(), name:name.trim(), isMe:false, guestOf:s.id};
+      const m = {id:uid(), name:name.trim(), isMe:false, guestOf:canonId(c, s.id)};
       c.members.push(m);
       s.participantIds.push(m.id);
       save();
@@ -2294,15 +2563,20 @@ document.addEventListener("click", e=>{
     save(); return render();
   }
   if (d.tobiRule){
-    const c = community(V.id);
-    c.rules.tobi = d.tobiRule === "on";
-    if (c.rules.tobiPoints == null) c.rules.tobiPoints = 10;
+    const T = ruleTarget();
+    T.tobi = d.tobiRule === "on";
+    if (T.tobiPoints == null) T.tobiPoints = 10;
     save(); return render();
   }
   if (d.umaPreset){
-    const c = community(V.id);
-    c.rules.uma = UMA_PRESETS[c.rules.playerCount][+d.umaPreset].uma.slice();
+    const T = ruleTarget();
+    T.uma = UMA_PRESETS[T.playerCount][+d.umaPreset].uma.slice();
     save(); return render();
+  }
+  if (d.openDayRules !== undefined){
+    const s = DB.sessions.find(x=>x.id===V.id);
+    if (!s.rules) s.rules = JSON.parse(JSON.stringify(community(s.communityId).rules));
+    sheet = {kind:"dayRules"}; return render();
   }
   if (d.delCommunity !== undefined){
     const c = community(V.id);
@@ -2326,6 +2600,7 @@ document.addEventListener("click", e=>{
         participantIds:regulars(c).map(m=>m.id), games:[], chips:{}, penalties:{}};
       DB.sessions.push(s); save();
       go({name:"session", id:s.id});
+      sheet = {kind:"parts"}; render();
     };
     // 同じ日の記録が既にあるなら、続けるか別の卓かを聞く
     const same = DB.sessions.filter(x=>x.communityId===c.id && x.date===today());
@@ -2337,6 +2612,7 @@ document.addEventListener("click", e=>{
         {label:"別の卓として始める", run:start}
       ]);
   }
+  if (d.openParts !== undefined){ sheet = {kind:"parts"}; return render(); }
   if (d.togglePart){
     const s = DB.sessions.find(x=>x.id===V.id);
     if (s.participantIds.includes(d.togglePart)){
@@ -2434,7 +2710,9 @@ document.addEventListener("click", e=>{
     if (points.some(p=>p===null || isNaN(p))) return toast("持ち点が入っていない席があります");
     if (points.reduce((a,b)=>a+b,0) !== R.startPoints*n)
       return toast("持ち点の合計が合っていません");
-    const g = {seats:seats.slice(), points:points.slice()};
+    const prev = sheet.index == null ? null : s.games.find(x=>x.id===sheet.draft.id);
+    const g = {id: prev ? prev.id : uid(), c: prev ? prev.c : Date.now(),
+               seats:seats.slice(), points:points.slice()};
     if (tobiOn(R)){
       const by = sheet.draft.tobiBy || {};
       const tobiBy = {};
@@ -2447,18 +2725,20 @@ document.addEventListener("click", e=>{
       }
       if (Object.keys(tobiBy).length) g.tobiBy = tobiBy;
     }
-    const isNew = sheet.index == null;
-    if (isNew) s.games.push(g); else s.games[sheet.index] = g;
+    const isNew = !prev;
+    if (isNew) s.games.push(g); else s.games[s.games.indexOf(prev)] = g;
     save(); sheet = null; render();
     return toast(isNew ? "記録しました" : "修正しました");
   }
   if (d.delGame !== undefined){
     const s = DB.sessions.find(x=>x.id===V.id);
-    const gi = sheet.index;
+    const gid = sheet.draft.id;
+    const gi = s.games.findIndex(x=>x.id===gid);
     sheet = null;
+    if (gi < 0) return render();
     return deleteWithUndo(`半荘${gi+1}を削除しました`,
       Object.assign({}, V, {openGames:[]}),   // 番号がずれるので展開は閉じる
-      ()=>{ s.games.splice(gi,1); });
+      ()=>{ s.games = s.games.filter(x=>x.id!==gid); });
   }
 
   if (d.export !== undefined){ sheet = {kind:"data", mode:"export"}; return render(); }
@@ -2512,7 +2792,7 @@ document.addEventListener("click", e=>{
     return askConfirm("データを置き換える",
       `今の記録を消して、コミュニティ${data.communities.length}件・${data.sessions.length}日分に置き換えます。`,
       "置き換える", ()=>{
-        DB = Object.assign(newDB(), data); save(); go({name:"home"});
+        DB = Object.assign(newDB(), data); SNAP = null; save(); go({name:"home"});
         toast("読み込みました");
       });
   }
@@ -2556,12 +2836,12 @@ document.addEventListener("change", e=>{
     return;
   }
   if (d.rule === "tieBreak"){
-    const c = community(V.id);
-    c.rules.tieBreak = val === "split" ? "split" : "seat";
+    ruleTarget().tieBreak = val === "split" ? "split" : "seat";
     save(); return render();
   }
   if (d.rule){
     const c = community(V.id);
+    const T = ruleTarget();
     // 空欄のままだと Number("") が 0 になってしまうので、先に弾いて元の値に戻す
     if (val.trim() === "") return render();
     const num = Math.round(Number(val));
@@ -2577,15 +2857,14 @@ document.addEventListener("change", e=>{
         {rate:c.rules.rate, chipPoints:chipPoints(c.rules), chipStart:chipStart(c.rules),
          tobi:tobiOn(c.rules), tobiPoints:tobiPoints(c.rules)});
     } else {
-      c.rules[d.rule] = num;
+      T[d.rule] = num;
     }
     save(); return render();
   }
   if (d.uma !== undefined){
-    const c = community(V.id);
     if (val.trim() === "") return render();
     const num = Math.round(Number(val));
-    if (!isNaN(num)) c.rules.uma[+d.uma] = num;
+    if (!isNaN(num)) ruleTarget().uma[+d.uma] = num;
     save(); return render();
   }
   if (d.chip){
@@ -2649,6 +2928,8 @@ if (wideQuery.addEventListener) wideQuery.addEventListener("change", onWideChang
 else wideQuery.addListener(onWideChange);          // 古いSafari向け
 window.addEventListener("resize", onWideChange);   // 念のための二重がけ
 
+ensureGameIds();
+SNAP = takeSnap();
 render();
 loadSetup();
 loadShared();

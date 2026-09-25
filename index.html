@@ -1918,13 +1918,6 @@ function viewSession(){
         <div class="muted" style="font-size:11px;margin-top:5px">${updatedLabel(c)}</div>
       </div>` : ""}
       ${c.share && !c.readOnly ? `<div class="sendline" data-send-status="${c.id}">${sendStatus(c)}</div>` : ""}
-      ${c.readOnly ? "" : `<div class="partline"><span class="muted">今日のメンバー</span>
-        <span class="names">${parts.map(p=>esc(memberName(c,p))).join("・")}</span>
-        <button class="btn ghost sm" data-open-parts style="padding:1px 10px;font-size:11.5px">変更</button></div>
-      <div class="partline"><span class="muted">ルール</span>
-        <span class="names">${tableName(R.playerCount)}・${umaLabel(R)}・${R.rate}円${
-          tobiOn(R) ? `・飛び ${tobiPoints(R)}` : ""}</span>
-        <button class="btn ghost sm" data-open-day-rules style="padding:1px 10px;font-size:11.5px">変更</button></div>`}
       <div class="${s.games.length ? "cards" : ""}">
         <div class="card"><div class="card-p" style="padding-bottom:6px"><p class="eyebrow">今日の収支</p></div>
           <div class="scroller" style="padding:0 16px 14px"><table class="gtbl">
@@ -2015,12 +2008,15 @@ function viewSession(){
 
   /* ---- データタブ：その日ぶんだけを詳しく見る ---- */
   function dataTab(){
-    if (!s.games.length) return `<main><div class="empty">
-      半荘を記録すると、この日の内訳が出ます。</div></main>`;
+    if (!s.games.length) return `<main class="stack"><div class="empty">
+      半荘を記録すると、この日の内訳が出ます。</div>
+      ${c.readOnly ? "" : `<div class="card card-p"><button class="btn sm" data-open-day-rules>この日のルールを変える</button></div>`}
+    </main>`;
 
+    const me = myMember(c);
     const rows = parts.map(mid=>({mid, e:t[mid]}))
       .filter(o=>o.e)
-      .sort((a,b)=> b.e.money - a.e.money);
+      .sort((a,b)=> (b.mid===me?.id)-(a.mid===me?.id) || b.e.money-a.e.money);
 
     const cards = rows.map(({mid,e})=>{
       const rate = e.games ? e.ranks.map(r=>r/e.games) : [0,0,0,0];
@@ -2031,7 +2027,7 @@ function viewSession(){
           data-go-member="${c.id}:${mid}">
         <div class="card-p" style="padding-bottom:12px">
           <div class="between">
-            <div style="font-family:var(--serif);font-size:16px;font-weight:600">${esc(memberName(c,mid))}
+            <div style="font-family:var(--serif);font-size:16px;font-weight:600">${esc(memberName(c,mid))}${mid===me?.id ? ' <span class="roletag">自分</span>' : ""}
               <span class="chev" style="font-size:14px">›</span></div>
             <div class="money ${cls(e.money)}" style="font-size:17px">${yen(e.money)}</div>
           </div>

@@ -1,0 +1,65 @@
+const fs=require('fs'),vm=require('vm'),assert=require('assert/strict');
+const html=fs.readFileSync('app.html','utf8');const src=html.match(/<script>([\s\S]*)<\/script>/)[1];
+new vm.Script(src);
+const store=()=>({data:{},getItem(k){return this.data[k]??null},setItem(k,v){this.data[k]=v},removeItem(k){delete this.data[k]}});
+const app={innerHTML:''};const doc={addEventListener(){},querySelectorAll(){return []},getElementById(){return app},hidden:false};
+const ctx=vm.createContext({console,URLSearchParams,Date,localStorage:store(),sessionStorage:store(),navigator:{userAgent:'test'},location:{search:'',href:'https://example.invalid/'},document:doc,setTimeout:()=>1,clearTimeout(){},setInterval(){},window:{navigator:{},matchMedia:()=>({matches:false,addEventListener(){}}),addEventListener(){}},fetch:()=>{throw Error('Unexpected network')}});
+vm.runInContext(src,ctx);
+(async()=>{
+await vm.runInContext(`(async()=>{
+ function check(v,m){if(!v)throw Error(m)}
+ const c={id:'test',name:'会',rules:defaultRules(4),members:['a','b','c','d'].map(id=>({id,name:id,isMe:id==='a'})),share:{key:'test',id:'test'},sharedFrom:true,readOnly:false};
+ DB={communities:[c],sessions:[]};
+ const day={id:'day1',communityId:c.id,date:today(),rules:c.rules,participantIds:['a','b','c','d'],games:[{id:'g',seats:['a','b','c','d'],points:[40000,30000,20000,10000]}],chips:{},penalties:{}};
+ DB.sessions.push(day);
+ check(myMember(c)===null,'shared isMe must not choose identity');
+ const before=JSON.stringify(shareBody(c));setMyMember(c,'d');
+ check(JSON.stringify(shareBody(c))===before,'preference must not change shared data');
+ check(myMember(c).id==='d','local preference');
+ check(selfPanel(c)==='', 'self prompt hidden after selection');
+ let out=tabStats(c);check(out.indexOf('data-go-member="test:d"')<out.indexOf('data-go-member="test:a"'),'own card first');
+ check(out.indexOf('data-go-member="test:d"')<out.indexOf('みんなの収支'),'own above graph');
+ check(myMember({...c,id:'other'}).id==='d','same share same preference');
+ check(myMember({...c,share:{id:'test',key:'other'}})===null,'different share isolated');
+ check(todayShortcut(c).includes('day1'),'today link');
+ DB.sessions.push({...day,id:'day2'});check(todayShortcut(c).includes('卓 2'),'multiple tables');
+ check(todayShortcut({...c,readOnly:true})==='','viewer must not see entry shortcut');
+ V={name:'community',id:c.id};check(viewCommunity().includes('会｜通算'),'community heading');
+ V={name:'session',id:day.id};check(viewSession().includes('の記録'),'day heading');
+ const score=viewSession();check(!score.includes('data-open-parts') && !score.includes('data-open-day-rules'),'score top is clean');
+ V.stab='data';const data=viewSession();check(data.indexOf('data-go-member=\"test:d\"')<data.indexOf('data-go-member=\"test:a\"'),'own day data first');
+ check(data.includes('data-open-day-rules'),'rules remain editable on data tab');
+ day.games=[];check(viewSession().includes('data-open-day-rules'),'rules editable before first game');day.games=[{id:'g',seats:['a','b','c','d'],points:[40000,30000,20000,10000]}];V.stab='score';
+ V={name:'member',cid:c.id,mid:'d'};let member=viewMember();
+ check(member.includes('d｜通算成績'),'member total heading');
+ check(!member.includes('member-games'),'total detail has no day game table');
+ V.sid=day.id;member=viewMember();
+ check(member.includes('member-hd') && member.includes('‹ 記録へ'),'compact member header');
+ check(member.includes('d｜') && member.includes('の成績'),'member day heading');
+ check(member.indexOf('半荘ごとの成績')<member.indexOf('statgrid'),'day games precede summary');
+ check(member.includes('半荘1') && member.includes('10,000') && member.includes('rp4'),'day game details');
+ day.games.push({id:'g2',seats:['b','c','a','d'],points:[40000,30000,20000,10000]});
+ member=viewMember();check(member.includes('半荘2') && member.includes('<td>北</td>'),'second game seat');
+ day.games.pop();
+ c.syncAt='2026-09-25T11:35:00Z';check(updatedLabel(c).startsWith('最終更新'),'update label');
+ check(sendStatus(c).includes('このスマホに保存済み／みんなへの送信待ち'),'pending wording');
+ STORAGE_OK=false;check(!sendStatus(c).includes('このスマホに保存済み'),'save failure truthful');STORAGE_OK=true;
+ SNAP=takeSnap();
+ let payload;fetch=async(url,options)=>{
+  if(options?.method==='POST'){payload=JSON.parse(options.body).data;return {ok:true}}
+  return {ok:true,json:async()=>payload};
+ };
+ await sendShare(c);check(sendStatus(c).includes('みんなに反映済み'),'confirmed save');
+ c.name='changed';fetch=async(url,options)=>options?.method==='POST'?{ok:true}:{ok:true,json:async()=>payload};
+ await sendShare(c);check(SEND[c.id]==='failed' && sendStatus(c).includes('送信待ち'),'mismatched readback not confirmed');
+ fetch=async()=>{throw Error('offline')};await sendShare(c);check(sendStatus(c).includes('送信待ち'),'offline retained');
+ check(DB.sessions.length===2,'records retained');
+ c.readOnly=true;check(sendStatus(c)==='','viewer no send status');
+ V={name:'community',id:c.id,tab:'prefs'};check(viewCommunity().includes('表示設定'),'viewer preferences tab');
+ check(tabViewPrefs(c).includes('data-set-me=\"d\"'),'viewer can change own selection');
+ V.tab='stats';check(!viewCommunity().includes('aria-selected=\"true\" data-tab=\"settings\"'),'viewer no edit settings');
+ setMyMember(c,null);check(myMember(c)===null,'clear preference');
+ check(selfPanel(c).includes('自分を選ぶ'),'prompt returns after clearing');
+ console.log('PASS: preferences, card order, member day games, headings, roles, sync and offline states');
+})()`,ctx);
+})();

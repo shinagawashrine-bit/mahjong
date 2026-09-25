@@ -50,6 +50,7 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 /* 日付は見出しの見た目のまま、上に透明な日付入力を重ねてタップで選べるようにする */
 .datepick{position:relative;display:inline-flex;align-items:center;gap:5px;margin-left:auto;
   font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.scope-title{white-space:normal;overflow-wrap:anywhere;min-width:0;display:block;font-size:16px;text-align:right}
 .datepick .caret{font-size:11px;color:var(--ink-3);font-family:var(--sans)}
 .datepick input{position:absolute;inset:-8px;width:auto;height:auto;opacity:0;
   border:0;padding:0;margin:0;background:none;cursor:pointer}
@@ -251,7 +252,7 @@ input.neg{color:var(--bad);font-weight:600}
 .chip[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
 .chiprow{display:flex;gap:7px;flex-wrap:wrap}
 /* その日の画面の上：送信の状態と、今日のメンバー */
-.sendline{font-size:12px;text-align:right;margin:-4px 2px -6px;display:flex;gap:8px;justify-content:flex-end;align-items:center}
+.sendline{flex-wrap:wrap;overflow-wrap:anywhere;font-size:12px;text-align:right;margin:-4px 2px -6px;display:flex;gap:8px;justify-content:flex-end;align-items:center}
 .partline{display:flex;gap:8px;align-items:center;font-size:12.5px;padding:0 2px;margin-bottom:-4px}
 .partline .names{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sharebox{background:var(--surface-2);border:1px solid var(--line-soft);border-radius:8px;
@@ -407,7 +408,8 @@ function save(){
   SAVED_AT = new Date().toISOString();
   writeStore(sessionStorage, text);
   const ok = writeStore(localStorage, text);
-  if (!ok && STORAGE_OK){ STORAGE_OK = false; toast("保存できませんでした。空き容量を確認してください"); }
+  if (!ok && STORAGE_OK) toast("保存できませんでした。空き容量を確認してください");
+  STORAGE_OK = ok;
   try { localStorage.setItem(KEY + "__everSaved", "1"); } catch(e){}
   if (typeof queueShare === "function") queueShare();
   if (typeof queueBackup === "function") queueBackup();
@@ -694,21 +696,25 @@ function sendShare(c){
     if (c.sendAgain){ c.sendAgain = false; pushShare(c, true); }
   };
   const fail = ()=>{ SEND[c.id] = "failed"; showSendStatus(); };
+  const confirm = ()=>fetch(scriptUrl(id) + "?k=" + encodeURIComponent(c.share.key), {cache:"no-store"})
+    .then(r=>{ if (!r.ok) throw new Error("readback"); return r.json(); })
+    .then(d=>{ if (!d || d.error || !d.name || bodySig(c,d)!==sig) throw new Error("unconfirmed"); done(); })
+    .catch(fail);
   return fetch(scriptUrl(id), {
     method: "POST",
     headers: {"Content-Type": "text/plain;charset=utf-8"},   // 事前確認を挟ませない
     body
   }).then(r=>{
     // 書き込みが通っても、返ってくるのが JSON とは限らない（転送先のページが返る）。
-    // 通信が成立していれば送れたものとして扱う。
+    // 書き込み後に読み直し、送った内容と一致したときだけ反映済みにする。
     if (!r.ok) throw new Error("http " + r.status);
-    done();
+    return confirm();
   }).catch(()=>{
     // 返事を読めない環境でも、書き込み自体は通ることがあるので投げ直す
     return fetch(scriptUrl(id), {
       method: "POST", mode: "no-cors",
       headers: {"Content-Type": "text/plain;charset=utf-8"}, body
-    }).then(done).catch(fail);
+    }).then(confirm).catch(fail);
   });
 }
 
@@ -717,12 +723,13 @@ function sendShare(c){
 function sendStatus(c){
   if (!c || !c.share || c.readOnly) return "";
   const st = SEND[c.id];
-  if (st === "sending") return `<span class="muted">送信中…</span>`;
-  if (isUnsent(c)) return `<span style="color:var(--bad);font-weight:600">未送信${
-      st === "failed" ? "（通信できませんでした）" : ""}</span>
+  const local = STORAGE_OK ? "このスマホに保存済み" : "このスマホへの保存に失敗しました。空き容量を確認してください";
+  if (st === "sending") return `<span class="muted">${local}／みんなへ送信中…</span>`;
+  if (isUnsent(c)) return `<span style="color:${STORAGE_OK ? "var(--ink-2)" : "var(--bad)"}">${local}／みんなへの送信待ち</span>
+    ${st === "failed" ? '<span class="muted">（通信または反映を確認できませんでした）</span>' : ""}
     <button class="btn ghost sm" data-send-now="${c.id}" style="padding:1px 8px;font-size:11px">今すぐ送る</button>`;
-  return `<span style="color:var(--good)">送信済み ✓${c.sentAt ? " " +
-    new Date(c.sentAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) : ""}</span>`;
+  return `<span style="color:var(--good)">みんなに反映済み ✓</span>
+    ${!STORAGE_OK ? `<span style="color:var(--bad)">${local}</span>` : ""}`;
 }
 function showSendStatus(){
   document.querySelectorAll("[data-send-status]").forEach(el=>{
@@ -1177,7 +1184,7 @@ function render(){
 function viewHome(){
   const cards = DB.communities.map(c=>{
     const st = statsOf(c.id);
-    const me = c.members.find(m=>m.isMe);
+    const me = myMember(c);
     const total = sessionsOf(c.id).reduce((a,s)=>a+s.games.length, 0);
     const mine = me ? st[me.id] : null;
     return `<button class="card lrow" style="padding:0;display:block" data-go-community="${c.id}">
@@ -1260,8 +1267,8 @@ function viewHome(){
           合言葉 <b class="num">${esc(DB.backupKey)}</b>
           ― 別の端末で「自動で復元」するときに使います</p>` : ""}
       </div>
-      ${DB.communities.some(c=>c.members.some(m=>m.isMe)) ? "" : DB.communities.length ?
-        `<p class="muted" style="text-align:center">メンバーの1人を「自分」に設定すると、ここに自分の成績が出ます</p>` : ""}
+      ${DB.communities.some(c=>myMember(c)) ? "" : DB.communities.length ?
+        `<p class="muted" style="text-align:center">成績画面で自分を選ぶと、ここにも自分の成績が出ます</p>` : ""}
       <p style="text-align:center;margin:4px 0 0"><a class="btn ghost sm" href="guide/" target="_blank" rel="noopener">使い方ガイド</a></p>
     </main>`;
 }
@@ -1273,7 +1280,7 @@ function viewCommunity(){
   const tab = V.tab || "stats";
   return `<header><div class="hd">
       <button class="back" data-go-home>‹ 一覧</button>
-      <h1 style="text-align:right">${esc(c.name)}</h1>
+      <h1 style="text-align:right;white-space:normal;overflow-wrap:anywhere">${esc(c.name)}｜通算</h1>
     </div></header>
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="${tab==="stats"}" data-tab="stats">成績</button>
@@ -1284,26 +1291,70 @@ function viewCommunity(){
     </div>
     ${c.sharedFrom ? `<p class="viewonly">${c.readOnly ? "共有された記録です（閲覧者）" : "共有された記録です（編集者）"}
         · <a href="guide/" target="_blank" rel="noopener" style="color:inherit">使い方</a>${
-        c.syncAt ? ` · ${new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"})}時点` : ""}
+        ` · ${updatedLabel(c)}`}
         <button class="btn ghost sm" data-refresh-share
           style="padding:1px 8px;font-size:11px;margin-left:6px">${SHARE_STATE || "今すぐ読み込む"}</button>${
         c.readOnly ? "" : `<br><span data-send-status="${c.id}" style="font-size:11.5px">${sendStatus(c)}</span>`}</p>` : ""}
+    ${todayShortcut(c)}
     ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
+}
+
+// 表示の好みは共有・バックアップ対象の DB に入れない。
+const VIEW_PREF_KEY = KEY + "__view_preferences";
+function viewPrefs(){
+  try { const v = JSON.parse(localStorage.getItem(VIEW_PREF_KEY) || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+  catch(e){ return {}; }
+}
+function prefKey(c){ return c.share ? shareScriptId(c) + ":" + c.share.key : c.id; }
+function myMember(c){
+  const id = viewPrefs()[prefKey(c)];
+  return regulars(c).find(m=>m.id===id) || null;
+}
+function setMyMember(c, id){
+  const prefs = viewPrefs(); prefs[prefKey(c)] = id;
+  try { localStorage.setItem(VIEW_PREF_KEY, JSON.stringify(prefs)); }
+  catch(e){ toast("表示の設定を保存できませんでした。空き容量を確認してください"); return; }
+  render();
+}
+function selfPanel(c){
+  const me = myMember(c);
+  return `<div class="card card-p"><div class="between" style="gap:12px;flex-wrap:wrap">
+    <div><strong>${me ? esc(me.name)+"さんの成績を先頭に表示" : "あなたは誰ですか？（任意）"}</strong>
+    <div class="muted" style="font-size:11px">この端末だけの表示設定です</div></div>
+    <button class="btn sm" data-choose-self="${c.id}">${me ? "変更" : "自分を選ぶ"}</button>
+    </div></div>`;
+}
+function todayShortcut(c){
+  if (c.readOnly) return "";
+  const list = DB.sessions.filter(s=>s.communityId===c.id && s.date===today());
+  if (!list.length) return "";
+  return `<div class="card card-p stack" style="margin:12px 16px">
+    <strong>今日の卓を続ける</strong>${list.map((s,i)=>`<button class="btn wide"
+      style="text-align:left;white-space:normal" data-go-session="${s.id}">
+      ${list.length>1 ? "卓 "+(i+1)+" · " : ""}${s.games.length}半荘 · ${s.participantIds.map(id=>esc(memberName(c,id))).join("・")} ›
+    </button>`).join("")}</div>`;
+}
+function updatedLabel(c){
+  return c.syncAt ? "最終更新 " + new Date(c.syncAt).toLocaleString("ja-JP",{
+    month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) : "更新時刻は未確認";
 }
 
 function tabStats(c){
   const st = statsOf(c.id);
   const rows = Object.values(st).filter(s=>s.games>0 || s.carry)
     .sort((a,b)=> b.money - a.money);   // 収支の高い順
-  if (!rows.length) return `<main><div class="empty">
-    まだ記録がありません。<br>「記録」タブから今日の卓を始めてください。</div></main>`;
+  const me = myMember(c);
+  if (me) rows.sort((a,b)=>(b.id===me.id)-(a.id===me.id));
+  if (!rows.length) return `<main class="stack">${selfPanel(c)}<div class="empty">
+    まだ記録がありません。${c.readOnly ? "" : '<br>「記録」タブから今日の卓を始めてください。'}</div></main>`;
 
   const n = c.rules.playerCount;
   const cards = rows.map(s=>`
     <button class="card card-p" style="display:block;width:100%;text-align:left;
         font-family:inherit;color:inherit;cursor:pointer" data-go-member="${c.id}:${s.id}">
       <div class="between">
-        <div style="font-family:var(--serif);font-size:16px;font-weight:600">${esc(s.name)}
+        <div style="font-family:var(--serif);font-size:16px;font-weight:600">${esc(s.name)}${s.id===me?.id ? ' <span class="roletag">自分</span>' : ""}
           <span class="chev" style="font-size:14px">›</span></div>
         <div style="text-align:right">
           <div class="money ${cls(s.money)}" style="font-size:16px">${yen(s.money)}</div>
@@ -1324,13 +1375,16 @@ function tabStats(c){
         s.chips ? ` · チップ ${signed(s.chips)}枚` : ""}${
         s.tips ? ` · 祝儀 ${signed(s.tips)}` : ""}${
         s.penalty ? ` · 祝儀・ペナルティ ${signed(s.penalty)}` : ""}</div>
-    </button>`).join("");
+    </button>`);
 
   return `<main class="stack">
+    ${selfPanel(c)}
+    ${me && !rows.some(s=>s.id===me.id) ? `<p class="muted">${esc(me.name)}さんの記録はまだありません。</p>` : ""}
+    ${me && rows[0]?.id===me.id ? cards[0] : ""}
     <div class="card"><div class="card-p" style="padding-bottom:10px">
-      <p class="eyebrow">収支の推移（日ごとの累積）</p>${chart(c, st)}
+      <p class="eyebrow">みんなの収支の推移（日ごとの累積）</p>${chart(c, st)}
     </div></div>
-    <div class="cards">${cards}</div>
+    <div class="cards">${(me && rows[0]?.id===me.id ? cards.slice(1) : cards).join("")}</div>
   </main>`;
 }
 
@@ -1565,7 +1619,7 @@ function tabSettings(c){
       <div class="stack" style="gap:8px">
         ${regulars(c).map(m=>`<div class="row">
           <input value="${esc(m.name)}" data-member-name="${m.id}" style="flex:1">
-          <button class="chip" aria-pressed="${!!m.isMe}" data-set-me="${m.id}">自分</button>
+          <button class="chip" aria-pressed="${myMember(c)?.id===m.id}" data-set-me="${m.id}">自分</button>
           <button class="btn ghost sm danger" data-del-member="${m.id}">削除</button>
         </div>`).join("")}
       </div>
@@ -1649,9 +1703,9 @@ function viewMember(){
   const rate = m.games ? m.ranks.map(r=>r/m.games) : new Array(n).fill(0);
   const avg = avgRankOf(m.ranks, m.games);
 
-  const back = `<button class="back" data-go-back>‹ 戻る</button>`;
+  const back = sess ? `<button class="back" data-go-session="${sess.id}">‹ その日の記録へ</button>` : `<button class="back" data-go-community="${c.id}">‹ 通算へ</button>`;
   if (!m.games) return `<header><div class="hd">${back}
-      <span class="datepick" style="pointer-events:none">${esc(memberName(c,mid))}</span></div></header>
+      <span class="datepick scope-title" style="pointer-events:none">${esc(memberName(c,mid))}さんの${sess ? fmtDate(sess.date)+"の成績" : "通算成績"}</span></div></header>
     <main class="stack"><div class="empty">${sess ? "この日は打っていません。" : "まだ半荘の記録がありません。"}</div>
       ${sess ? `<button class="btn wide" data-go-member-total="${c.id}:${mid}">
         通算成績</button>` : ""}</main>`;
@@ -1679,7 +1733,7 @@ function viewMember(){
   </tr>`).join("");
 
   return `<header><div class="hd">${back}
-      <span class="datepick" style="pointer-events:none">${esc(memberName(c,mid))}</span>
+      <span class="datepick scope-title" style="pointer-events:none">${esc(memberName(c,mid))}さんの${sess ? fmtDate(sess.date)+"の成績" : "通算成績"}</span>
     </div></header>
     <main class="stack">
       <div class="card">
@@ -1849,9 +1903,7 @@ function viewSession(){
       ${c.readOnly ? `<div style="text-align:center;margin-bottom:-2px">
         <button class="btn sm" data-refresh-share style="padding:7px 22px">
           ${SHARE_STATE || "今すぐ読み込む"}</button>
-        <div class="muted" style="font-size:11px;margin-top:5px">${c.syncAt
-          ? new Date(c.syncAt).toLocaleString("ja-JP",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"}) + "時点"
-          : "共有中"}</div>
+        <div class="muted" style="font-size:11px;margin-top:5px">${updatedLabel(c)}</div>
       </div>` : ""}
       ${c.share && !c.readOnly ? `<div class="sendline" data-send-status="${c.id}">${sendStatus(c)}</div>` : ""}
       ${c.readOnly ? "" : `<div class="partline"><span class="muted">今日のメンバー</span>
@@ -1937,8 +1989,8 @@ function viewSession(){
     </main>`;
 
   return `<header><div class="hd">
-      <button class="back" data-go-community="${c.id}">‹ ${esc(c.name)}</button>
-      <span class="datepick">${fmtDate(s.date)}<span class="caret">▾</span>
+      <button class="back" data-go-community="${c.id}">‹ 通算へ</button>
+      <span class="datepick">${fmtDate(s.date)}の記録<span class="caret">▾</span>
         <input type="date" value="${s.date}" data-session-date aria-label="日付を選ぶ"></span>
     </div></header>
     <div class="tabs" role="tablist">
@@ -2359,6 +2411,15 @@ document.addEventListener("click", e=>{
   if (!t) return;
   const d = t.dataset;
 
+  if (d.chooseSelf){
+    const c = community(d.chooseSelf);
+    if (!c) return;
+    return askChoice("あなたは誰ですか？", "選ばなくても使えます。選んだ人のカードを、この端末だけで先頭に表示します。", [
+      ...regulars(c).map(m=>({label:m.name, primary:myMember(c)?.id===m.id,
+        run:()=>setMyMember(c,m.id)})),
+      {label:"選ばずに使う", run:()=>setMyMember(c,null)}
+    ]);
+  }
   if (d.goHome !== undefined) return go({name:"home"});
   if (d.goCommunity) return go({name:"community", id:d.goCommunity, tab:"stats"});
   if (d.goSession) return go({name:"session", id:d.goSession});
@@ -2539,11 +2600,8 @@ document.addEventListener("click", e=>{
   }
   if (d.setMe){
     const c = community(V.id);
-    const cur = c.members.find(m=>m.id===d.setMe);
-    const on = !cur.isMe;
-    c.members.forEach(m=>{ m.isMe = false; });
-    cur.isMe = on;
-    save(); return render();
+    if (!regulars(c).some(m=>m.id===d.setMe)) return;
+    return setMyMember(c, myMember(c)?.id===d.setMe ? null : d.setMe);
   }
   if (d.delMember){
     const c = community(V.id);

@@ -51,6 +51,8 @@ header{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 8
 .datepick{position:relative;display:inline-flex;align-items:center;gap:5px;margin-left:auto;
   font-family:var(--serif);font-size:18px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
 .scope-title{white-space:normal;overflow-wrap:anywhere;min-width:0;display:block;font-size:16px;text-align:right}
+.member-hd .back{flex:none;white-space:nowrap}
+.member-hd .scope-title{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .datepick .caret{font-size:11px;color:var(--ink-3);font-family:var(--sans)}
 .datepick input{position:absolute;inset:-8px;width:auto;height:auto;opacity:0;
   border:0;padding:0;margin:0;background:none;cursor:pointer}
@@ -1715,12 +1717,27 @@ function viewMember(){
   const rate = m.games ? m.ranks.map(r=>r/m.games) : new Array(n).fill(0);
   const avg = avgRankOf(m.ranks, m.games);
 
-  const back = sess ? `<button class="back" data-go-session="${sess.id}">‹ その日の記録へ</button>` : `<button class="back" data-go-community="${c.id}">‹ 通算へ</button>`;
-  if (!m.games) return `<header><div class="hd">${back}
-      <span class="datepick scope-title" style="pointer-events:none">${esc(memberName(c,mid))}さんの${sess ? fmtDate(sess.date)+"の成績" : "通算成績"}</span></div></header>
+  const name = memberName(c,mid);
+  const fullTitle = `${name}さんの${sess ? fmtDate(sess.date)+"の成績" : "通算成績"}`;
+  const shortTitle = sess ? `${name}｜${Number(sess.date.slice(5,7))}/${Number(sess.date.slice(8,10))}の成績` : `${name}｜通算成績`;
+  const back = sess ? `<button class="back" data-go-session="${sess.id}" aria-label="その日の記録へ戻る">‹ 記録へ</button>` : `<button class="back" data-go-community="${c.id}">‹ 通算へ</button>`;
+  const memberHeader = `<header><div class="hd member-hd">${back}
+    <span class="datepick scope-title" title="${esc(fullTitle)}" aria-label="${esc(fullTitle)}">${esc(shortTitle)}</span></div></header>`;
+  if (!m.games) return `${memberHeader}
     <main class="stack"><div class="empty">${sess ? "この日は打っていません。" : "まだ半荘の記録がありません。"}</div>
       ${sess ? `<button class="btn wide" data-go-member-total="${c.id}:${mid}">
         通算成績</button>` : ""}</main>`;
+
+  const dayGameRows = sess ? sess.games.map((g,gi)=>{
+    const i = g.seats.indexOf(mid);
+    if (i < 0) return "";
+    const {ranks,scores} = calcGame(g.points, rulesOf(sess));
+    const rank = ranks[i]+1;
+    return `<tr><td>半荘${gi+1}</td><td>${WINDS[i]}</td>
+      <td><span class="rp rp${rank}">${rank}</span></td>
+      <td class="num">${g.points[i].toLocaleString("ja-JP")}</td>
+      <td class="num ${cls(scores[i])}">${signed(scores[i])}</td></tr>`;
+  }).filter(Boolean).join("") : "";
 
   // 席順別
   const seatRows = m.bySeat.map((b,i)=>`<tr>
@@ -1744,10 +1761,14 @@ function viewMember(){
     <td class="num ${cls(v.score)}">${signed(Math.round(v.score/v.games*10)/10)}</td>
   </tr>`).join("");
 
-  return `<header><div class="hd">${back}
-      <span class="datepick scope-title" style="pointer-events:none">${esc(memberName(c,mid))}さんの${sess ? fmtDate(sess.date)+"の成績" : "通算成績"}</span>
-    </div></header>
+  return `${memberHeader}
     <main class="stack">
+      ${dayGameRows ? `<div class="card">
+        <div class="card-p" style="padding-bottom:4px"><p class="eyebrow">半荘ごとの成績</p></div>
+        <div class="scroller" style="padding:0 16px 14px"><table class="gtbl member-games">
+          <thead><tr><th>半荘</th><th>席</th><th>着順</th><th>持ち点</th><th>成績</th></tr></thead>
+          <tbody>${dayGameRows}</tbody></table></div>
+      </div>` : ""}
       <div class="card">
         <div class="card-p" style="padding-bottom:8px">
           <p class="eyebrow" style="margin:0">${scopeLabel} ${m.games}半荘</p></div>

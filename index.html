@@ -1285,7 +1285,8 @@ function viewCommunity(){
     <div class="tabs" role="tablist">
       <button class="tab" role="tab" aria-selected="${tab==="stats"}" data-tab="stats">成績</button>
       <button class="tab" role="tab" aria-selected="${tab==="log"}" data-tab="log">記録</button>
-      ${c.readOnly ? "" :
+      ${c.readOnly ?
+        `<button class="tab" role="tab" aria-selected="${tab==="prefs"}" data-tab="prefs">表示設定</button>` :
         `<button class="tab" role="tab" aria-selected="${tab==="settings"}" data-tab="settings">設定</button>`}
 
     </div>
@@ -1296,7 +1297,17 @@ function viewCommunity(){
           style="padding:1px 8px;font-size:11px;margin-left:6px">${SHARE_STATE || "今すぐ読み込む"}</button>${
         c.readOnly ? "" : `<br><span data-send-status="${c.id}" style="font-size:11.5px">${sendStatus(c)}</span>`}</p>` : ""}
     ${todayShortcut(c)}
-    ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : tabSettings(c)}`;
+    ${tab==="stats" ? tabStats(c) : tab==="log" ? tabLog(c) : c.readOnly ? tabViewPrefs(c) : tabSettings(c)}`;
+}
+
+function tabViewPrefs(c){
+  return `<main class="stack"><div class="card card-p stack">
+    <h2 class="sec">自分の表示</h2>
+    <p class="muted">自分を選ぶと、通算の成績で自分のカードが先頭に出ます。この端末だけに保存されます。</p>
+    <div class="chiprow">${regulars(c).map(m=>`<button class="chip"
+      aria-pressed="${myMember(c)?.id===m.id}" data-set-me="${m.id}">${esc(m.name)}</button>`).join("")}</div>
+    <p class="muted">選択中の名前をもう一度押すと、選択を外せます。</p>
+  </div></main>`;
 }
 
 // 表示の好みは共有・バックアップ対象の DB に入れない。
@@ -1318,11 +1329,12 @@ function setMyMember(c, id){
   render();
 }
 function selfPanel(c){
-  const me = myMember(c);
+  // 初回だけ案内する。選んだあとは設定の「自分」から変更する。
+  if (myMember(c)) return "";
   return `<div class="card card-p"><div class="between" style="gap:12px;flex-wrap:wrap">
-    <div><strong>${me ? esc(me.name)+"さんの成績を先頭に表示" : "あなたは誰ですか？（任意）"}</strong>
+    <div><strong>あなたは誰ですか？（任意）</strong>
     <div class="muted" style="font-size:11px">この端末だけの表示設定です</div></div>
-    <button class="btn sm" data-choose-self="${c.id}">${me ? "変更" : "自分を選ぶ"}</button>
+    <button class="btn sm" data-choose-self="${c.id}">自分を選ぶ</button>
     </div></div>`;
 }
 function todayShortcut(c){
@@ -2414,7 +2426,7 @@ document.addEventListener("click", e=>{
   if (d.chooseSelf){
     const c = community(d.chooseSelf);
     if (!c) return;
-    return askChoice("あなたは誰ですか？", "選ばなくても使えます。選んだ人のカードを、この端末だけで先頭に表示します。", [
+    return askChoice("あなたは誰ですか？", `選ばなくても使えます。選んだ人のカードを、この端末だけで先頭に表示します。あとからは「${c.readOnly ? "表示設定" : "設定 → メンバー"}」で変更できます。`, [
       ...regulars(c).map(m=>({label:m.name, primary:myMember(c)?.id===m.id,
         run:()=>setMyMember(c,m.id)})),
       {label:"選ばずに使う", run:()=>setMyMember(c,null)}

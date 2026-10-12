@@ -1,4 +1,4 @@
-<title>麻雀成績</title>
+<title>麻雀成績管理アプリ</title>
 <style>
 :root{
   --bg:#E4E4DA; --surface:#F5F4EE; --surface-2:#EBEAE1; --line:#C9CCC2; --line-soft:#DBDCD3;
@@ -1208,7 +1208,7 @@ function viewHome(){
   }).join("");
 
   return `<header><div class="hd center">
-      <h1 style="text-align:center">麻雀成績記録</h1>
+      <h1 style="text-align:center">麻雀成績管理アプリ</h1>
     </div></header>
     <main class="stack">
       ${SHARED_LOADING ? `<div class="card card-p" style="text-align:center">共有された記録を読み込んでいます…</div>` : ""}
@@ -2849,7 +2849,7 @@ document.addEventListener("click", e=>{
       const blob = new Blob([JSON.stringify(DB,null,2)], {type:"application/json"});
       const a = document.createElement("a");
       a.href = URL.createObjectURL(blob);
-      a.download = `麻雀成績_${today()}.json`;
+      a.download = `麻雀成績管理アプリ_${today()}.json`;
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
     } catch(err){ toast("保存できません。上の文字列をコピーしてください"); }
@@ -2862,7 +2862,7 @@ document.addEventListener("click", e=>{
     try { data = JSON.parse(ta.value); }
     catch(err){ return toast("読み取れませんでした。全部貼れているか確認してください"); }
     if (!data || !Array.isArray(data.communities) || !Array.isArray(data.sessions))
-      return toast("麻雀成績のデータではないようです");
+      return toast("麻雀成績管理アプリのデータではないようです");
     return askConfirm("データを置き換える",
       `今の記録を消して、コミュニティ${data.communities.length}件・${data.sessions.length}日分に置き換えます。`,
       "置き換える", ()=>{

@@ -12,18 +12,18 @@ cd "$(dirname "$0")"
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>麻雀成績管理アプリ</title>
+<title>麻雀成績</title>
 <meta name="theme-color" content="#E4E4DA">
 <meta name="color-scheme" content="light">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="麻雀成績管理アプリ">
+<meta name="apple-mobile-web-app-title" content="麻雀成績">
 <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <link rel="icon" href="favicon.png?v=2">
 </head>
 <body>
 HEAD
   # app.html 側の <title> は head に移してあるので取り除く
-  grep -v '^<title>麻雀成績管理アプリ</title>$' app.html
+  grep -v '^<title>麻雀成績</title>$' app.html
   cat <<'TAIL'
 </body>
 </html>

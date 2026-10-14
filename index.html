@@ -1632,8 +1632,7 @@ function tabSettings(c){
       <h2 class="sec">メンバー</h2>
       <div class="stack" style="gap:8px">
         ${regulars(c).map(m=>`<div class="row">
-          <span style="flex:1;min-width:0;overflow-wrap:anywhere;font-size:15px">${esc(m.name)}</span>
-          <button class="btn ghost sm" data-rename-member="${m.id}">修正</button>
+          <input value="${esc(m.name)}" data-member-name="${m.id}" style="flex:1">
           <button class="chip" aria-pressed="${myMember(c)?.id===m.id}" data-set-me="${m.id}">自分</button>
           <button class="btn ghost sm danger" data-del-member="${m.id}">削除</button>
         </div>`).join("")}
@@ -2628,16 +2627,6 @@ document.addEventListener("click", e=>{
       save();
     });
   }
-  // 名前の修正も、追加と同じく「修正」ボタンを押したときだけ反映する
-  if (d.renameMember){
-    const c = community(V.id);
-    const m = c && c.members.find(x=>x.id===d.renameMember);
-    if (!m) return;
-    return askText("名前を修正", "名前", m.name, "修正", name=>{
-      if (!name.trim()){ toast("名前を入れてください"); return false; }
-      if (name.trim() !== m.name){ m.name = name.trim(); save(); }
-    });
-  }
   if (d.setMe){
     const c = community(V.id);
     if (!regulars(c).some(m=>m.id===d.setMe)) return;
@@ -2896,15 +2885,13 @@ document.addEventListener("click", e=>{
   }
 });
 
-// テキスト入力シートは、キーボードの改行・完了では決定しない（キーボードを閉じるだけ）。
-// 日本語入力の変換確定で改行を押すと、打ちかけの名前でメンバーが登録されてしまうため。
-// 登録は「追加」などのボタンを押したときだけ。
+// テキスト入力シートは Enter で決定できるようにする
 document.addEventListener("keydown", e=>{
   if (e.key !== "Enter" || !sheet) return;
-  if (e.isComposing || e.keyCode === 229) return;   // 変換の確定はそのまま通す
   if (e.target.matches("input[data-ask]")){
     e.preventDefault();
-    e.target.blur();
+    const btn = document.querySelector("[data-ask-ok]");
+    if (btn) btn.click();
   }
 });
 
@@ -2924,6 +2911,12 @@ document.addEventListener("change", e=>{
     return;
   }
 
+  if (d.memberName){
+    const c = community(V.id);
+    const m = c.members.find(x=>x.id===d.memberName);
+    if (m && val.trim()){ m.name = val.trim(); save(); }
+    return;
+  }
   if (d.communityName !== undefined){
     const c = community(V.id);
     if (val.trim()){ c.name = val.trim(); save(); render(); }

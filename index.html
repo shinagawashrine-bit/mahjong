@@ -120,10 +120,13 @@ label.fld{display:flex;flex-direction:column;gap:5px;font-size:12.5px;color:var(
 .lrow .grow{flex:1;min-width:0}
 .chev{color:var(--ink-3);font-size:16px;flex-shrink:0}
 /* 記録一覧の2行目：その日の各自のポイント（高い順） */
-.sesscores{display:flex;flex-wrap:wrap;gap:3px 12px;margin-top:4px;font-size:12px;line-height:1.5}
-.ss{display:inline-flex;align-items:baseline;gap:4px;white-space:nowrap}
-.ssname{color:var(--ink-2)}
-.ss b{font-weight:600}
+/* 記録の一覧の点数は1行に収める。幅が足りないときは fitScoreLines() が文字を小さくする。
+   それでも収まらないときだけ名前を「…」で詰める（点数は必ず見せる） */
+.sesscores{display:flex;flex-wrap:nowrap;gap:0 .8em;margin-top:4px;font-size:12px;line-height:1.5;min-width:0}
+.ss{display:inline-flex;align-items:baseline;gap:.3em;white-space:nowrap;min-width:0;flex:0 1 auto}
+.ssname{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;min-width:1.2em}
+.ss b{font-weight:600;flex:none}
+.sesscores.measure .ss{flex:none}
 
 /* ---- stats ---- */
 .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--line-soft)}
@@ -1178,9 +1181,22 @@ function render(){
   else if (V.name === "session") html = viewSession();
   else if (V.name === "member") html = viewMember();
   app.innerHTML = html;
+  fitScoreLines();
   if (sheet) renderSheet();
   else document.querySelectorAll(".scrim,.sheet").forEach(e=>e.remove());
 }
+
+/* 記録の一覧の点数の行を1行に収める。はみ出す行だけ、12px から 9px まで文字を小さくする */
+function fitScoreLines(){
+  document.querySelectorAll(".sesscores").forEach(el=>{
+    el.style.fontSize = "";
+    el.classList.add("measure");    // 名前を詰めない本来の幅で測る
+    for (let px = 11.5; el.scrollWidth > el.clientWidth + 1 && px >= 9; px -= 0.5) el.style.fontSize = px + "px";
+    el.classList.remove("measure");
+  });
+}
+let fitTimer = 0;
+window.addEventListener("resize", ()=>{ clearTimeout(fitTimer); fitTimer = setTimeout(fitScoreLines, 100); });
 
 /* ---- home ---- */
 function viewHome(){

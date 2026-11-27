@@ -672,7 +672,7 @@ function pushShare(c, quiet){
   SEND[c.id] = "sending"; showSendStatus();
   return pullShare(c).then(ch=>{
     if (ch === null){ SEND[c.id] = "failed"; showSendStatus(); return; }   // 通信できない
-    if (ch){ render(); if (!quiet) toast("ほかの人が入れた記録と合わせました"); }
+    if (ch === true){ render(); if (!quiet) toast("ほかの人が入れた記録と合わせました"); }
     if (!isUnsent(c)){ SEND[c.id] = undefined; showSendStatus(); return; }
     return sendShare(c);
   });
@@ -743,69 +743,167 @@ function queueShare(){
 }
 
 /* 自動バックアップ。共有と同じ保管庫に、記録まるごとの控えを置く。
-   共有していないコミュニティも含めて預ける。合言葉は端末の中だけに持つ。 */
+   共有していないコミュニティも含めて預ける。合言葉は端末の中だけに持つ。
+   2026/11/27から、同じ合言葉の端末（幹事の2台目・3台目）は、この控えを通じて中身をそろえる。
+   送る前に必ず読んで突き合わせ（mergeGroup）、手元と控えが違うときだけ送る。
+   そろえるもの：コミュニティの一覧と中身・共有の合言葉・消したコミュニティ（DB.ctomb）・「自分」の選択。
+   そろえないもの：送信の状態（syncAt・sentAt・sentSig）。端末ごとのものなので。 */
 let BACKUP_STATE = "";
-let lastBackup = null, backupTimer = null;
+let lastBackup = null, backupTimer = null, GROUP_BUSY = false, GROUP_AGAIN = false;
 
 function backupBody(){
-  return {communities: DB.communities, sessions: DB.sessions, syncId: DB.syncId};
+  return {communities: DB.communities, sessions: DB.sessions, syncId: DB.syncId,
+          ctomb: DB.ctomb || {}, prefs: groupPrefs()};
+}
+// 端末ごとの状態を除いた中身の指紋。同じなら送らない
+const DEVICE_ONLY = ["syncAt", "sentAt", "sentSig", "sendAgain"];
+function groupSig(b){
+  const strip = c => { const o = Object.assign({}, c); DEVICE_ONLY.forEach(k=>{ delete o[k]; }); return o; };
+  return hash(stable({
+    communities: (b.communities||[]).map(strip).sort((x,y)=> x.id < y.id ? -1 : 1),
+    sessions: (b.sessions||[]).slice().sort((x,y)=> x.id < y.id ? -1 : 1),
+    ctomb: b.ctomb || {}, prefs: b.prefs || {}
+  }));
 }
 function pushBackup(quiet){
   if (!DB.syncId || !DB.backupKey) return Promise.resolve();
-  const body = JSON.stringify(backupBody());
-  if (lastBackup === body) return Promise.resolve();
-  const at = new Date().toISOString();
+  if (GROUP_BUSY){ GROUP_AGAIN = true; return Promise.resolve(); }
+  if (quiet && isBusy()){ queueBackup(); return Promise.resolve(); }   // 入力中は後回し
+  GROUP_BUSY = true;
   if (!quiet){ BACKUP_STATE = "保存中"; render(); }
-  return fetch(scriptUrl(DB.syncId), {
-    method: "POST",
-    headers: {"Content-Type": "text/plain;charset=utf-8"},
-    body: JSON.stringify({k: "bk_" + DB.backupKey, data: Object.assign(backupBody(), {at})})
-  }).then(r=>{
-    if (!r.ok) throw new Error("http " + r.status);
-    lastBackup = body; DB.backupAt = at; BACKUP_STATE = "";
-    try { localStorage.setItem(KEY, JSON.stringify(Object.assign({}, DB, {savedAt:at}))); } catch(e){}
-    if (!quiet) render();
-  }).catch(()=>{ BACKUP_STATE = "保存できませんでした"; if (!quiet) render(); });
+  return pullBackup(true).then(d=>{
+    if (d === null) throw new Error("offline");
+    if (d) mergeGroup(d);
+    if (d && groupSig(d) === groupSig(backupBody())){   // 控えと同じ＝送るものはない
+      DB.backupAt = d.at || DB.backupAt; BACKUP_STATE = "";
+      if (!quiet) render();
+      return;
+    }
+    const at = new Date().toISOString();
+    return fetch(scriptUrl(DB.syncId), {
+      method: "POST",
+      headers: {"Content-Type": "text/plain;charset=utf-8"},
+      body: JSON.stringify({k: "bk_" + DB.backupKey, data: Object.assign(backupBody(), {at})})
+    }).then(r=>{
+      if (!r.ok) throw new Error("http " + r.status);
+      lastBackup = JSON.stringify(backupBody()); DB.backupAt = at; BACKUP_STATE = "";
+      try { localStorage.setItem(KEY, JSON.stringify(Object.assign({}, DB, {savedAt:at}))); } catch(e){}
+      if (!quiet) render();
+    });
+  }).catch(()=>{ BACKUP_STATE = "保存できませんでした"; if (!quiet) render(); })
+    .then(()=>{ GROUP_BUSY = false; if (GROUP_AGAIN){ GROUP_AGAIN = false; queueBackup(); } });
 }
+const syncGroup = () => pushBackup(true);
 function queueBackup(){
   if (!DB.syncId || !DB.backupKey) return;
   clearTimeout(backupTimer);
   backupTimer = setTimeout(()=>pushBackup(true), 3000);
 }
-function pullBackup(){
+/* 控えを読む。見つかった控え／まだ無い false（strict のとき）／読めなかった null */
+function pullBackup(strict){
   if (!DB.syncId || !DB.backupKey) return Promise.resolve(null);
-  return fetch(scriptUrl(DB.syncId) + "?k=" + encodeURIComponent("bk_" + DB.backupKey))
-    .then(r=>r.json()).then(d=>(d && !d.error && d.communities) ? d : null).catch(()=>null);
+  return fetch(scriptUrl(DB.syncId) + "?k=" + encodeURIComponent("bk_" + DB.backupKey), {cache:"no-store"})
+    .then(r=>r.json()).then(d=>{
+      if (d && !d.error && d.communities) return d;
+      if (strict && d && (d.error === "notfound" || d.error === "empty")) return false;
+      return null;
+    }).catch(()=>null);
+}
+/* 同じ合言葉の別の端末の控えを、手元と突き合わせる。中身ごとに新しい方を残す（共有と同じ mergeShared を使う） */
+function mergeGroup(d){
+  const before = groupSig(backupBody());
+  const ct = Object.assign({}, d.ctomb || {});
+  Object.entries(DB.ctomb || {}).forEach(([k,v])=>{ if (!ct[k] || ct[k] < v) ct[k] = v; });
+  DB.ctomb = ct;
+  const alive = c => !ct[c.id] || ct[c.id] < (c.reviveAt || "");
+  (d.communities || []).forEach(rc=>{
+    if (!alive(rc)) return;
+    const mine = (d.sessions || []).filter(s=>s.communityId === rc.id);
+    const lc = community(rc.id);
+    if (!lc){                                         // 別の端末で作ったコミュニティ
+      const c = JSON.parse(JSON.stringify(rc));
+      DEVICE_ONLY.forEach(k=>{ delete c[k]; });
+      DB.communities.push(c);
+      DB.sessions = DB.sessions.concat(JSON.parse(JSON.stringify(mine)));
+      return;
+    }
+    if ((rc.reviveAt || "") > (lc.reviveAt || "")) lc.reviveAt = rc.reviveAt;
+    mergeShared(lc, {name:rc.name, rules:rc.rules, carry:rc.carry, members:rc.members || [],
+      metaAt:rc.metaAt, tomb:rc.tomb, sessions:JSON.parse(JSON.stringify(mine))});
+    // 共有の設定（始めた・やめた）は新しい方を残す。時刻の無い古い記録は、合言葉の小さい方にそろえる
+    const ra = rc.shareAt || "", la = lc.shareAt || "";
+    let take = ra > la;
+    if (!ra && !la && rc.share && !lc.share) take = true;
+    if (!ra && !la && rc.share && lc.share && rc.share.key !== lc.share.key) take = rc.share.key < lc.share.key;
+    if (take){
+      if (rc.share) lc.share = Object.assign({}, rc.share); else delete lc.share;
+      lc.shareAt = rc.shareAt; lc.readOnly = rc.readOnly; lc.sharedFrom = rc.sharedFrom;
+      DEVICE_ONLY.forEach(k=>{ delete lc[k]; });
+    }
+  });
+  const gone = DB.communities.filter(c=>!alive(c)).map(c=>c.id);
+  if (gone.length){
+    DB.communities = DB.communities.filter(c=>!gone.includes(c.id));
+    DB.sessions = DB.sessions.filter(s=>!gone.includes(s.communityId));
+  }
+  mergePrefs(d.prefs);
+  if (groupSig(backupBody()) !== before){
+    SNAP = null; save();                              // 読んだものに自分の時刻を付けない
+    if (!isBusy()){
+      if ((V.name === "community" && !community(V.id)) ||
+          (V.name === "session" && !DB.sessions.some(s=>s.id === V.id))) V = {name:"home"};
+      render();
+    }
+  }
 }
 
 /* 預けてある写しを読み直す。閲覧者はそのまま写し、入力する側は突き合わせる。
-   返り値：変わった true／変わらない false／通信できなかった null */
+   返り値：変わった true／変わらない false／通信できなかった null／保管庫に見つからない "missing"
+   「新しいか」は端末の時計ではなく中身で決める（時計がずれた端末が新しい記録を読み飛ばさないように）。 */
 function pullShare(c){
   const id = shareScriptId(c);
   if (!id || !c.share) return Promise.resolve(false);
-  return fetch(scriptUrl(id) + "?k=" + encodeURIComponent(c.share.key))
+  return fetch(scriptUrl(id) + "?k=" + encodeURIComponent(c.share.key), {cache:"no-store"})
     .then(r=>r.json())
     .then(d=>{
-      if (!d || d.error || !d.name) return false;
-      if (c.syncAt && d.at && d.at <= c.syncAt) return false;   // 変わっていない
-      const before = bodySig(c, shareBody(c));
+      if (d && (d.error === "notfound" || d.error === "empty")) return "missing";
+      if (!d || d.error || !d.name) return null;
+      const before = bodySig(c, shareBody(c)), remote = bodySig(c, d);
+      c.syncAt = d.at || c.syncAt;
+      if (before === remote){                           // 手元と保管庫が同じ
+        if (c.sentSig !== remote){ c.sentSig = remote; SNAP = null; save(); }
+        return false;
+      }
       if (c.readOnly) replaceShared(c, d); else mergeShared(c, d);
-      c.syncAt = d.at;
       const after = bodySig(c, shareBody(c));
-      if (after === bodySig(c, d)) c.sentSig = after;   // 保管庫と同じ＝送るものはない
+      if (after === remote) c.sentSig = after;          // 保管庫と同じ＝送るものはない
       SNAP = null; save();                              // 読んだものに自分の時刻を付けない
       return after !== before;
     }).catch(()=>null);
 }
-function refreshShared(all){
-  const list = DB.communities.filter(c=>c.share && (all || c.readOnly));
+/* 入力中（シートを開いている・入力欄にいる）は読み直さない。描き直すと入力が消えるため */
+function isBusy(){
+  if (sheet) return true;
+  const a = document.activeElement;
+  return !!(a && (a.tagName === "INPUT" || a.tagName === "SELECT" || a.tagName === "TEXTAREA"));
+}
+/* 共有している記録を読み直す。閲覧者・編集者・幹事のどの端末でも同じ。 */
+function refreshShared(){
+  if (isBusy()) return;
+  const list = DB.communities.filter(c=>c.share);
   if (!list.length) return;
-  Promise.all(list.map(pullShare)).then(r=>{ if (r.some(x=>x === true)) render(); });
+  Promise.all(list.map(pullShare)).then(r=>{ if (r.some(x=>x === true) && !isBusy()) render(); });
 }
 document.addEventListener("visibilitychange", ()=>{
-  if (!document.hidden) refreshShared(true);          // 戻ってきたら読み直す
+  if (document.hidden) return;
+  refreshShared(); syncGroup();                       // 戻ってきたら読み直す
 });
-setInterval(()=>{ if (!document.hidden) refreshShared(false); }, 60000);  // 閲覧中は1分おき
+let refreshTick = 0;
+setInterval(()=>{                                     // 開いている間は1分おき
+  if (document.hidden) return;
+  refreshShared();
+  if (++refreshTick % 5 === 0) syncGroup();           // 幹事の端末どうしは5分おき
+}, 60000);
 
 /* 共有リンクで開かれたときは、預けてある写しを読んで並べる。
    入力用リンクで、手元に前からの記録があるときは突き合わせる（送れていなかった分を消さないため）。 */
@@ -817,7 +915,7 @@ function applyShared(id, key, d, canEdit){
     c.share = {key, id};
     mergeShared(c, d);
   } else {
-    c = {id:cid, share:{key, id}, sharedFrom:true, members:[]};
+    c = {id:cid, share:{key, id}, shareAt:new Date().toISOString(), sharedFrom:true, members:[]};
     DB.communities = DB.communities.filter(x=>x.id!==cid).concat([c]);
     replaceShared(c, d);
   }
@@ -1315,8 +1413,33 @@ function tabViewPrefs(c){
   </div></main>`;
 }
 
-// 表示の好みは共有・バックアップ対象の DB に入れない。
+// 表示の好みは共有の DB に入れない（仲間の端末とは別々）。
+// 幹事の端末どうしは、バックアップの控え（prefs）でそろえる。選んだ時刻を別に持って新しい方を残す。
 const VIEW_PREF_KEY = KEY + "__view_preferences";
+const VIEW_PREF_AT_KEY = KEY + "__view_preferences_at";
+function prefAts(){
+  try { const v = JSON.parse(localStorage.getItem(VIEW_PREF_AT_KEY) || "{}");
+    return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
+  catch(e){ return {}; }
+}
+function groupPrefs(){
+  const p = viewPrefs(), a = prefAts(), o = {};
+  Object.keys(Object.assign({}, p, a)).forEach(k=>{ o[k] = {id: p[k] || null, at: a[k] || ""}; });
+  return o;
+}
+function mergePrefs(remote){
+  if (!remote || typeof remote !== "object") return;
+  const p = viewPrefs(), a = prefAts();
+  let changed = false;
+  Object.entries(remote).forEach(([k,v])=>{
+    if (!v || (v.at || "") <= (a[k] || "")) return;
+    if (v.id) p[k] = v.id; else delete p[k];
+    a[k] = v.at; changed = true;
+  });
+  if (!changed) return;
+  try { localStorage.setItem(VIEW_PREF_KEY, JSON.stringify(p));
+        localStorage.setItem(VIEW_PREF_AT_KEY, JSON.stringify(a)); } catch(e){}
+}
 function viewPrefs(){
   try { const v = JSON.parse(localStorage.getItem(VIEW_PREF_KEY) || "{}");
     return v && typeof v === "object" && !Array.isArray(v) ? v : {}; }
@@ -1328,9 +1451,12 @@ function myMember(c){
   return regulars(c).find(m=>m.id===id) || null;
 }
 function setMyMember(c, id){
-  const prefs = viewPrefs(); prefs[prefKey(c)] = id;
-  try { localStorage.setItem(VIEW_PREF_KEY, JSON.stringify(prefs)); }
+  const prefs = viewPrefs(), ats = prefAts();
+  prefs[prefKey(c)] = id; ats[prefKey(c)] = new Date().toISOString();
+  try { localStorage.setItem(VIEW_PREF_KEY, JSON.stringify(prefs));
+        localStorage.setItem(VIEW_PREF_AT_KEY, JSON.stringify(ats)); }
   catch(e){ toast("表示の設定を保存できませんでした。空き容量を確認してください"); return; }
+  queueBackup();                                      // 幹事のほかの端末にも伝える
   render();
 }
 function selfPanel(c){
@@ -2382,7 +2508,7 @@ function openGameSheet(index){
   // 入力を始める前に、ほかの人が入れた分を読んでおく（送るときに食い違わないように）
   const c = community(s.communityId);
   if (c.share && !c.readOnly) pullShare(c).then(ch=>{
-    if (!ch) return;
+    if (ch !== true) return;
     readDraft(); render();
     toast("ほかの人が入れた記録を読み込みました");
   });
@@ -2423,7 +2549,9 @@ function doRestoreBackup(fresh){
       "元に戻す", ()=>{
         const keep = DB.backupKey;
         DB = Object.assign(newDB(), {communities:d2.communities, sessions:d2.sessions,
-                                     syncId:d2.syncId, backupKey:keep, backupAt:d2.at});
+                                     syncId:d2.syncId, backupKey:keep, backupAt:d2.at,
+                                     ctomb:d2.ctomb || {}});
+        mergePrefs(d2.prefs);
         lastBackup = JSON.stringify(backupBody());
         SNAP = null; save(); go({name:"home"});
         toast("控えから元に戻しました");
@@ -2511,6 +2639,7 @@ document.addEventListener("click", e=>{
       // 合言葉は10文字。リンクを短く保ちつつ、当てずっぽうでは届かない長さ
       const rnd = () => Math.random().toString(36).slice(2);
       c.share = {key: (rnd()+rnd()).slice(0,10), id: DB.syncId};
+      c.shareAt = new Date().toISOString();
       save(); render();
       pushShare(c);
     };
@@ -2529,7 +2658,9 @@ document.addEventListener("click", e=>{
     if (!c) return;
     SHARE_STATE = "読み込み中"; render();
     return pullShare(c).then(ch=>{ SHARE_STATE = ""; render();
-      toast(ch === null ? "読み込めませんでした。電波を確かめてください" : ch ? "最新にしました" : "変わりありません"); });
+      toast(ch === null ? "読み込めませんでした。電波を確かめてください"
+        : ch === "missing" ? "保管庫にこの記録が見つかりません。共有の合言葉を確かめてください"
+        : ch ? "最新にしました" : "保管庫と同じです（変わりありません）"); });
   }
   if (d.copyShare !== undefined){
     const c = community(V.id);
@@ -2559,6 +2690,7 @@ document.addEventListener("click", e=>{
     return askConfirm("共有をやめる",
       "リンクを開いても見られなくなります。手元の記録は消えません。", "やめる", ()=>{
         delete c.share; delete c.sentSig; delete c.sentAt;
+        c.shareAt = new Date().toISOString();
         save(); go({name:"community", id:c.id, tab:"settings"});
         toast("共有をやめました");
       });
@@ -2577,7 +2709,10 @@ document.addEventListener("click", e=>{
 
   if (d.undo !== undefined){
     if (!undoData) return;
+    const tombs = DB.ctomb || {};
     DB = JSON.parse(undoData.db);
+    // 消したコミュニティを戻したときは、ほかの端末に伝わった「消した印」より新しくする
+    DB.communities.forEach(c=>{ if (tombs[c.id]) c.reviveAt = new Date().toISOString(); });
     const back = undoData.view;
     undoData = null; save();
     document.querySelectorAll(".toast").forEach(t=>t.remove());
@@ -2675,6 +2810,7 @@ document.addEventListener("click", e=>{
         deleteWithUndo(`「${c.name}」を削除しました`, {name:"home"}, ()=>{
           DB.sessions = DB.sessions.filter(s=>s.communityId!==c.id);
           DB.communities = DB.communities.filter(x=>x.id!==c.id);
+          DB.ctomb = Object.assign({}, DB.ctomb, {[c.id]: new Date().toISOString()});
         });
       });
   }
@@ -3023,5 +3159,6 @@ SNAP = takeSnap();
 render();
 loadSetup();
 loadShared();
-refreshShared(true);
+refreshShared();
+syncGroup();
 </script>
